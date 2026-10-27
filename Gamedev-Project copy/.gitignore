@@ -1,0 +1,6 @@
+out/
+build/
+.vs/
+vcpkg_installed/
+compile_commands.json
+.DS_Store
