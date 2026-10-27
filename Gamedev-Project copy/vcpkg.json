@@ -1,0 +1,16 @@
+{
+  "name": "roarys-adventure",
+  "version-string": "0.1.0",
+  "description": "Roary's Adventure: Save Pawlina! - CAP4052 group project",
+  "dependencies": [
+    "glfw3",
+    "glm",
+    {
+      "name": "glad",
+      "features": [
+        "gl-api-33",
+        "loader"
+      ]
+    }
+  ]
+}
