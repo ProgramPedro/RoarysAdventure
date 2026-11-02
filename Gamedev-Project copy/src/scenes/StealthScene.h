@@ -9,7 +9,7 @@
 // BUILT IN STEPS. What works so far:
 //   [x] the scene exists, is reachable, and can report the floor complete
 //   [x] the room, and Roary walking around it with wall collision
-//   [ ] guards on patrol routes
+//   [~] a guard, standing still - patrol routes still to come
 //   [ ] vision cones and being spotted
 //   [ ] key items to pick up
 //   [ ] the locked door, which is the win condition
@@ -65,6 +65,7 @@ private:
     // --- drawing -------------------------------------------------------------
     void drawRoom();
     void drawRoary();
+    void drawGuard();
     void drawUi();
 
     // Converts a design-pixel measurement into real framebuffer pixels, so the
@@ -88,6 +89,13 @@ private:
     // Advances only while he is actually walking, so the bounce stops when he
     // does instead of bobbing on the spot.
     float walkCycle_ = 0.0f;
+
+    // --- the guard -----------------------------------------------------------
+    // One guard, standing where Config.h puts him. He does not move or see
+    // anything yet. Kept as plain members rather than a Guard struct until
+    // there is a second one and some behaviour worth grouping.
+    glm::vec3 guardPos_{0.0f};
+    float     guardFacingDeg_ = 0.0f;
 
     bool  sneaking_    = false;
     float elapsedTime_ = 0.0f;

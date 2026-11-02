@@ -355,10 +355,41 @@ inline constexpr float kF3BobAmount    = 0.055f;
 // exit door will eventually sit in.
 inline constexpr glm::vec3 kF3StartPos {-kF3RoomHalfX + 2.0f, 0.0f, kF3RoomHalfZ - 2.0f};
 
-// A soft blob shadow under him. Without one he reads as hovering, because the
-// scene has a single directional light and no shadow mapping.
+// A soft blob shadow, used under Roary and the guards alike. Without one they
+// read as hovering, because the scene has a single directional light and no
+// shadow mapping.
 inline constexpr glm::vec3 kF3ShadowColor {0.020f, 0.047f, 0.055f};
 inline constexpr float     kF3ShadowAlpha = 0.55f;
+
+//-----------------------------------------------------------------------------
+// GUARDS
+//
+// For now a guard is a block that stands still. Patrol routes, vision cones
+// and detection come later; what matters here is that he is placed in the same
+// world the collision uses and is easy to see against the dark deck.
+//
+// kF3Guard further up is the near-black silhouette the level-select diorama
+// draws. It is too close to the deck colour to read during play, so the guards
+// in the level itself use the lighter body below with a bright visor. The
+// visor also shows which way a guard is facing, which is what the vision cone
+// will be built on.
+//-----------------------------------------------------------------------------
+inline constexpr glm::vec3 kF3GuardBody  {0.188f, 0.208f, 0.247f}; // #30353F slate
+inline constexpr glm::vec3 kF3GuardHead  {0.251f, 0.275f, 0.318f}; // #404651 lighter
+inline constexpr glm::vec3 kF3GuardVisor {0.949f, 0.639f, 0.212f}; // #F2A336 amber
+
+inline constexpr float kF3GuardRadius     = 0.45f;  // for collision, later
+inline constexpr float kF3GuardBodyHeight = 1.45f;
+inline constexpr float kF3GuardHeadSize   = 0.52f;
+
+// Standing in the middle room, facing the near wall. One guard for now; this
+// becomes a table once there are patrol routes to give them.
+inline constexpr glm::vec3 kF3GuardStart   {1.0f, 0.0f, -2.0f};
+
+// Degrees about Y, using the same convention as Roary's facing: 0 looks down
+// +Z (toward the camera), 90 looks down +X, 180 looks away from the camera.
+// Angled rather than square-on so he reads as a solid figure, not a flat tile.
+inline constexpr float     kF3GuardFacing  = 35.0f;
 
 // CAMERA: a fixed angled overhead view framing the whole room at once. For a
 // stealth level this beats a follow camera - the player has to see where every

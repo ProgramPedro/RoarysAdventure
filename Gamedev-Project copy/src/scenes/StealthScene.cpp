@@ -54,6 +54,10 @@ bool StealthScene::init() {
     walkCycle_   = 0.0f;
     sneaking_    = false;
     elapsedTime_ = 0.0f;
+
+    guardPos_        = cfg::kF3GuardStart;
+    guardFacingDeg_  = cfg::kF3GuardFacing;
+
     return true;
 }
 
@@ -225,6 +229,7 @@ void StealthScene::render() {
     renderer.setCamera(camera.view(), camera.perspective(width, height));
 
     drawRoom();
+    drawGuard();
     drawRoary();
     drawUi();
 }
@@ -310,6 +315,49 @@ void StealthScene::drawRoom() {
         drawSlab(wall.centerX, wall.centerZ, wall.sizeX, wall.sizeZ,
                  cfg::kF3InnerWallHeight);
     }
+}
+
+void StealthScene::drawGuard() {
+    Renderer& renderer = ctx().renderer;
+
+    const float bodyHeight = cfg::kF3GuardBodyHeight;
+    const float headSize   = cfg::kF3GuardHeadSize;
+    const float width      = cfg::kF3GuardRadius * 2.0f;
+
+    // Blob shadow first, flat on the deck, same as Roary gets. Translucent, so
+    // depth writes are off or it punches a hole in the floor behind it.
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(guardPos_.x, 0.015f, guardPos_.z),
+                            glm::vec3(width * 1.15f, 0.02f, width * 1.15f),
+                            cfg::kF3ShadowColor, cfg::kF3ShadowAlpha, 1.0f);
+    renderer.setDepthWrite(true);
+
+    const glm::vec3 spin(0.0f, guardFacingDeg_, 0.0f);
+
+    // Body and head: two boxes, the same shape the level-select diorama uses
+    // for its guards, so the two screens agree on what a guard looks like.
+    renderer.drawBox(
+        makeTransform(guardPos_ + glm::vec3(0.0f, bodyHeight * 0.5f, 0.0f),
+                      glm::vec3(width, bodyHeight, width * 0.78f), spin),
+        cfg::kF3GuardBody);
+
+    renderer.drawBox(
+        makeTransform(guardPos_ + glm::vec3(0.0f, bodyHeight + headSize * 0.5f, 0.0f),
+                      glm::vec3(headSize, headSize, headSize), spin),
+        cfg::kF3GuardHead);
+
+    // The visor, on the front of the head. It is the only bright thing on him,
+    // so it reads from across the room AND shows which way he is looking -
+    // which is exactly what the vision cone will be attached to.
+    const float facingRad = glm::radians(guardFacingDeg_);
+    const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
+
+    renderer.drawBox(
+        makeTransform(guardPos_
+                          + glm::vec3(0.0f, bodyHeight + headSize * 0.58f, 0.0f)
+                          + forward * (headSize * 0.5f),
+                      glm::vec3(headSize * 0.82f, headSize * 0.26f, 0.06f), spin),
+        cfg::kF3GuardVisor, 1.0f, 1.0f);
 }
 
 void StealthScene::drawRoary() {
