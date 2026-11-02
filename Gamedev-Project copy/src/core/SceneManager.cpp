@@ -7,6 +7,7 @@
 // of the engine from depending on any particular level.
 #include "scenes/LevelSelectScene.h"
 #include "scenes/PlaceholderLevelScene.h"
+#include "scenes/StealthScene.h"
 
 #include <iostream>
 
@@ -32,7 +33,7 @@ std::unique_ptr<Scene> SceneManager::createScene(SceneId id) {
         //     case SceneId::Floor1: return std::make_unique<PlatformerScene>();
         case SceneId::Floor1: return std::make_unique<PlaceholderLevelScene>(0);
         case SceneId::Floor2: return std::make_unique<PlaceholderLevelScene>(1);
-        case SceneId::Floor3: return std::make_unique<PlaceholderLevelScene>(2);
+        case SceneId::Floor3: return std::make_unique<StealthScene>();
         case SceneId::Floor4: return std::make_unique<PlaceholderLevelScene>(3);
 
         case SceneId::None:

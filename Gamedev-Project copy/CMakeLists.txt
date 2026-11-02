@@ -28,6 +28,7 @@ add_executable(roary
     # --- scenes --------------------------------------------------------------
     src/scenes/LevelSelectScene.cpp
     src/scenes/PlaceholderLevelScene.cpp
+    src/scenes/StealthScene.cpp
 )
 
 # Lets every file use includes like "core/Config.h" instead of long relative paths.

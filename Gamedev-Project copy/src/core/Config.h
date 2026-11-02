@@ -262,6 +262,119 @@ inline constexpr float     kF3LightAlpha  = 0.34f;
 inline constexpr float     kF3SweepSpeed  = 0.9f;
 inline constexpr float     kF3SweepDeg    = 26.0f;  // half-angle of the sweep
 
+//-----------------------------------------------------------------------------
+// FLOOR 3 GAMEPLAY  (the stealth level itself, not the menu diorama above)
+//
+// The room lies on the XZ plane with +Y up, centered on the origin, so the
+// walls sit at +/-kF3RoomHalfX and +/-kF3RoomHalfZ and every position below
+// reads as an offset from the middle of the room. Roary never leaves y = 0:
+// he does not jump, so the level is really a 2D problem wearing a 3D coat.
+//
+// On screen, with the fixed camera further down: -Z is the FAR wall and +Z is
+// the near one, so W moves away from the viewer and S moves toward them.
+//-----------------------------------------------------------------------------
+inline constexpr float kF3RoomHalfX  = 16.0f;  // half the floor's X size
+inline constexpr float kF3RoomHalfZ  = 10.5f;  // half the floor's Z size
+inline constexpr float kF3WallHeight = 1.80f;
+inline constexpr float kF3WallThick  = 0.50f;
+
+// The NEAR (+Z) wall is only a low lip. A full-height wall there would stand
+// between the camera and the room and hide the front row entirely - the same
+// problem the level-select tower solves by leaving its front open. Collision
+// is unaffected: clampToRoom() does not care how tall a wall is drawn.
+inline constexpr float kF3NearWallHeight = 0.34f;
+
+// Interior walls are shorter than the perimeter. From an angled overhead
+// camera a full-height divider hides whatever stands behind it, and in a
+// stealth level the thing hidden is usually a guard you needed to see.
+inline constexpr float kF3InnerWallHeight = 1.15f;
+
+//-----------------------------------------------------------------------------
+// THE ROOM LAYOUT
+//
+// Interior walls divide the floor into four rooms joined by doorways, so the
+// level is a route to work out rather than one open box. Each entry is an
+// axis-aligned slab given as a centre and a size on the XZ plane; they are
+// what the collision in StealthScene actually tests against, so editing this
+// table changes both what is drawn and where Roary can walk. Keep the gaps
+// at least a couple of player diameters wide or a doorway becomes a wall.
+//
+//        -X                                                   +X
+//    -Z   +-----------+-------------------+-----------------+
+//         |           |                   |     ROOM D      |
+//         |  ROOM A   |      ROOM B       |-----_____-------|   <- divider C
+//         |      _    |          _        |     ROOM C      |
+//    +Z   +------|----+----------|--------+-----------------+
+//            divider A      divider B
+//-----------------------------------------------------------------------------
+struct F3WallSlab {
+    float centerX;
+    float centerZ;
+    float sizeX;
+    float sizeZ;
+};
+
+inline constexpr F3WallSlab kF3InnerWalls[] = {
+    // Divider A, at x = -4, with a doorway at z = 1.0 .. 4.0.
+    { -4.0f, -4.75f, kF3WallThick, 11.5f },
+    { -4.0f,  7.25f, kF3WallThick,  6.5f },
+
+    // Divider B, at x = +6, with a doorway at z = -6.5 .. -3.5.
+    {  6.0f, -8.50f, kF3WallThick,  4.0f },
+    {  6.0f,  3.50f, kF3WallThick, 14.0f },
+
+    // Divider C, at z = 0, splitting the right-hand side into rooms C and D.
+    // Doorway at x = 11.0 .. 14.0.
+    {  8.50f, 0.0f,  5.0f, kF3WallThick },
+    { 15.00f, 0.0f,  2.0f, kF3WallThick },
+};
+
+inline constexpr int kF3InnerWallCount =
+    static_cast<int>(sizeof(kF3InnerWalls) / sizeof(kF3InnerWalls[0]));
+
+// The deck is a checkerboard. In a game with no textures at all, that pattern
+// is the only thing giving a sense of speed and distance as Roary walks, so it
+// is doing real work rather than just decoration.
+inline constexpr glm::vec3 kF3FloorA   {0.063f, 0.129f, 0.149f}; // #101F26 dark tile
+inline constexpr glm::vec3 kF3FloorB   {0.086f, 0.169f, 0.192f}; // #162B31 light tile
+inline constexpr glm::vec3 kF3WallIn   {0.110f, 0.235f, 0.267f}; // #1C3C44 inner wall
+inline constexpr glm::vec3 kF3Trim     {0.169f, 0.357f, 0.396f}; // #2B5B65 top capping
+inline constexpr float     kF3TileSize = 2.50f;
+
+// Roary. kF3PlayerRadius is what the wall collision actually uses, so it is
+// his real size rather than just how big he looks.
+inline constexpr float kF3PlayerRadius = 0.42f;
+inline constexpr float kF3PlayerScale  = 1.55f;  // multiplies his natural 1.42 height
+inline constexpr float kF3WalkSpeed    = 5.20f;  // world units per second
+inline constexpr float kF3SneakSpeed   = 2.30f;  // while Shift is held
+inline constexpr float kF3TurnSpeed    = 11.0f;  // how fast he swings to face his heading
+inline constexpr float kF3BobSpeed     = 11.0f;  // the walk bounce
+inline constexpr float kF3BobAmount    = 0.055f;
+
+// Where he starts: the near-left corner, diagonally opposite the far wall the
+// exit door will eventually sit in.
+inline constexpr glm::vec3 kF3StartPos {-kF3RoomHalfX + 2.0f, 0.0f, kF3RoomHalfZ - 2.0f};
+
+// A soft blob shadow under him. Without one he reads as hovering, because the
+// scene has a single directional light and no shadow mapping.
+inline constexpr glm::vec3 kF3ShadowColor {0.020f, 0.047f, 0.055f};
+inline constexpr float     kF3ShadowAlpha = 0.55f;
+
+// CAMERA: a fixed angled overhead view framing the whole room at once. For a
+// stealth level this beats a follow camera - the player has to see where every
+// guard is to plan a route, and a camera that chases Roary hides exactly the
+// half of the room they need.
+inline constexpr glm::vec3 kF3CameraPos    {0.0f, 26.16f, 21.71f};
+inline constexpr glm::vec3 kF3CameraTarget {0.0f, 0.0f, 2.00f};
+inline constexpr float     kF3CameraFovDeg = 46.0f;
+
+// kF3CameraFovDeg is the VERTICAL field of view at this aspect ratio. The room
+// is much wider than it is deep, so on a narrower window a fixed vertical FOV
+// crops the left and right walls off the screen. StealthScene widens the FOV
+// below this aspect to hold the horizontal coverage steady instead - a narrow
+// window then shows the same width of room with more empty space above it.
+inline constexpr float kF3DesignAspect = 1.60f;  // 1280x800, the default window
+
 // Top floor - Boss fight: crimson room, caged Pawlina, three rival mascots.
 inline constexpr glm::vec3 kF4Wall    {0.353f, 0.063f, 0.188f}; // #5A1030 deep crimson
 inline constexpr glm::vec3 kF4CageBar {0.604f, 0.639f, 0.678f}; // #9AA3AD silver
