@@ -480,6 +480,126 @@ inline constexpr glm::vec3 kF3DoorFrame  {0.310f, 0.467f, 0.502f}; // #4F7780 st
 // open yet. Long enough to read, short enough not to nag.
 inline constexpr float kF3LockedFlashTime = 1.60f;
 
+//-----------------------------------------------------------------------------
+// THROWN ROCKS
+//
+// Press E to aim, move the mouse to pick a spot on the floor, click to throw.
+// The rock flies an arc to where you pointed - unless a wall is in the way, in
+// which case it stops dead at the wall and the noise happens THERE instead.
+// That difference is the whole tactic: a rock bounced off the near side of a
+// divider pulls a guard toward you, one lobbed through a doorway pulls him
+// away.
+//
+// The noise is drawn rather than heard: this project has no audio library, so
+// an expanding ring on the deck is the cue.
+//-----------------------------------------------------------------------------
+inline constexpr int   kF3RockCount      = 5;      // how many Roary carries
+inline constexpr float kF3RockThrowRange = 12.0f;  // furthest he can lob one
+inline constexpr float kF3RockSpeed      = 15.0f;  // horizontal units per second
+inline constexpr float kF3RockArcHeight  = 1.90f;  // peak of the arc
+inline constexpr float kF3RockRadius     = 0.17f;
+
+inline constexpr glm::vec3 kF3RockColor {0.545f, 0.580f, 0.620f}; // #8B949E grey
+
+// The aiming marker. Two colours, because where the rock LANDS is the thing
+// the player is choosing, and it is not always where they are pointing.
+inline constexpr glm::vec3 kF3MarkerOpen    {0.675f, 0.886f, 0.937f}; // clear path
+inline constexpr glm::vec3 kF3MarkerBlocked {0.949f, 0.639f, 0.212f}; // stops at a wall
+
+// The noise a landed rock makes: a ring that expands to this radius and fades.
+// Guards do not react to it yet - that arrives with patrol routes - but the
+// radius is already the number their hearing check will use.
+inline constexpr float kF3NoiseRadius   = 5.50f;
+inline constexpr float kF3NoiseDuration = 1.30f;
+inline constexpr glm::vec3 kF3NoiseColor {0.812f, 0.965f, 1.000f};
+
+//-----------------------------------------------------------------------------
+// GUARD DISTRACTION
+//
+// A rock landing within kF3NoiseRadius of a guard pulls his attention: he
+// turns in place toward the sound, an exclamation mark appears over his head,
+// and after kF3GuardAlertTime he turns back and carries on. Since nothing
+// patrols yet, "carries on" means returning to the facing he started with and
+// staying exactly where he is.
+//
+// Hearing deliberately IGNORES walls. Sound goes around corners, and a rock
+// thrown through a doorway to pull a guard off a room he is watching is the
+// whole point of carrying rocks - a wall-blocked hearing test would kill it.
+//-----------------------------------------------------------------------------
+inline constexpr float kF3GuardAlertTime     = 4.00f;  // seconds the ! stays up
+inline constexpr float kF3GuardAlertTurnRate = 5.00f;  // how fast he snaps round
+
+// The exclamation mark. Bright and emissive so it carries across the room,
+// since it is the only confirmation the player gets that a throw worked.
+inline constexpr glm::vec3 kF3AlertMark      {1.000f, 0.776f, 0.180f}; // #FFC62E
+// Generous clearance: the camera looks down at about 53 degrees, so anything
+// directly above the guard projects BEHIND him on screen and a mark held close
+// to his head is swallowed by his own silhouette.
+inline constexpr float     kF3AlertMarkY     = 1.15f;
+inline constexpr float     kF3AlertBobSpeed  = 7.00f;
+inline constexpr float     kF3AlertBobAmount = 0.07f;
+
+// The cone while he is distracted but has not actually seen anybody: amber,
+// between the calm cyan and the alarm red.
+inline constexpr glm::vec3 kF3ConeAlerted {0.949f, 0.639f, 0.212f}; // #F2A336
+
+//-----------------------------------------------------------------------------
+// GUARD PATROL AND NAVIGATION
+//
+// The guard walks a loop of patrol points. He does NOT walk at them in a
+// straight line: the floor has walls and doorways in the way, so the route
+// between two points is worked out with Dijkstra over a grid of the walkable
+// deck, built once when the level starts.
+//
+// kF3NavCell is the resolution of that grid. Smaller is a tighter fit through
+// doorways and a slower search; 0.5 gives about 2,700 cells here, which solves
+// in well under a millisecond and only ever runs when he picks a new target.
+//-----------------------------------------------------------------------------
+inline constexpr float kF3NavCell = 0.50f;
+
+// The loop. Point 1 is in room D, so getting there means routing through the
+// doorway in divider B rather than walking at the wall - which is the whole
+// reason there is a pathfinder.
+inline constexpr glm::vec3 kF3PatrolPoints[] = {
+    {  -1.0f, 0.0f, -7.0f },  // room B, far side
+    {  10.5f, 0.0f, -7.5f },  // room D, through divider B's doorway
+    {  10.5f, 0.0f, -1.5f },  // room D, up against divider C
+    {   0.0f, 0.0f,  5.0f },  // room B, near side
+};
+
+inline constexpr int kF3PatrolCount =
+    static_cast<int>(sizeof(kF3PatrolPoints) / sizeof(kF3PatrolPoints[0]));
+
+inline constexpr float kF3GuardSpeed      = 2.60f;  // slower than Roary walks
+inline constexpr float kF3GuardTurnRate   = 7.00f;
+inline constexpr float kF3GuardPauseTime  = 1.20f;  // a look around at each point
+inline constexpr float kF3GuardArriveDist = 0.20f;  // "close enough" to a node
+
+//-----------------------------------------------------------------------------
+// SUSPICION
+//
+// Being seen does not catch you instantly. A meter fills while the guard has
+// eyes on Roary and drains once he does not, and only a full meter fails the
+// level. Instant detection reads as unfair and is miserable to play - the
+// meter is what gives you the "get back behind the wall" moment that makes
+// stealth fun.
+//
+// It fills faster the closer he is, so being spotted across the room is a
+// warning and being spotted at his feet is not.
+//-----------------------------------------------------------------------------
+inline constexpr float kF3SuspicionNearRate = 1.45f;  // per second, point blank
+inline constexpr float kF3SuspicionFarRate  = 0.38f;  // per second, at max range
+inline constexpr float kF3SuspicionSneakMul = 0.62f;  // sneaking is less visible
+inline constexpr float kF3SuspicionDrain    = 0.42f;  // per second, out of sight
+inline constexpr float kF3SuspicionGrace    = 0.80f;  // hold before it drains
+inline constexpr float kF3CaughtFlashTime   = 2.20f;  // CAUGHT message duration
+
+// The meter fills from calm to alarm as it rises.
+inline constexpr glm::vec3 kF3MeterLow  {0.420f, 0.780f, 0.878f}; // #6BC7E0
+inline constexpr glm::vec3 kF3MeterHigh {0.961f, 0.345f, 0.286f}; // #F55849
+inline constexpr float     kF3MeterWidth  = 260.0f;   // design pixels
+inline constexpr float     kF3MeterHeight = 14.0f;
+
 // CAMERA: a fixed angled overhead view framing the whole room at once. For a
 // stealth level this beats a follow camera - the player has to see where every
 // guard is to plan a route, and a camera that chases Roary hides exactly the
