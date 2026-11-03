@@ -86,7 +86,8 @@ bool StealthScene::init() {
     guardFacingDeg_  = cfg::kF3GuardFacing;
 
     itemCollected_.fill(false);
-    playerSeen_ = false;
+    playerSeen_       = false;
+    lockedFlashTimer_ = 0.0f;
 
     return true;
 }
@@ -146,6 +147,37 @@ glm::vec3 StealthScene::clampToRoom(const glm::vec3& position, float radius) con
     return glm::vec3(std::clamp(position.x, -limitX, limitX),
                      position.y,
                      std::clamp(position.z, -limitZ, limitZ));
+}
+
+bool StealthScene::doorIsOpen() const {
+    return collectedCount() == cfg::kF3ItemCount;
+}
+
+void StealthScene::finishLevel() {
+    // The real win condition at last. markCompleted() marks floor 3 cleared
+    // AND unlocks the floor above it; the level-select screen reads
+    // GameProgress fresh every frame, so the change shows immediately.
+    ctx().progress.markCompleted(kFloorIndex);
+    returnToMenu();
+}
+
+void StealthScene::checkDoor() {
+    // The point on the inner face of the right wall that the door sits in.
+    const float dx = cfg::kF3RoomHalfX - playerPos_.x;
+    const float dz = cfg::kF3DoorZ     - playerPos_.z;
+
+    if (dx * dx + dz * dz > cfg::kF3DoorTriggerRadius * cfg::kF3DoorTriggerRadius) {
+        return;
+    }
+
+    if (doorIsOpen()) {
+        finishLevel();
+        return;
+    }
+
+    // Locked. Restart the flash rather than letting it tick down while he is
+    // still standing there, so the message stays up for as long as he tries.
+    lockedFlashTimer_ = cfg::kF3LockedFlashTime;
 }
 
 int StealthScene::collectedCount() const {
@@ -356,6 +388,12 @@ void StealthScene::update(float deltaTime) {
     // ended this frame rather than where he started it.
     collectNearbyItems();
     playerSeen_ = guardCanSeePlayer();
+
+    // After the pickups, so the paw collected on this very frame already
+    // counts toward opening the door.
+    checkDoor();
+
+    lockedFlashTimer_ = std::max(0.0f, lockedFlashTimer_ - deltaTime);
 }
 
 //=============================================================================
@@ -388,6 +426,7 @@ void StealthScene::render() {
     drawRoom();
     drawGuard();
     drawVisionCone();   // after the guard, so it lies over the deck
+    drawDoor();
     drawItems();
     drawRoary();
     drawUi();
@@ -462,9 +501,22 @@ void StealthScene::drawRoom() {
     drawSlab(0.0f, -halfZ - thick * 0.5f, spanX, thick, height);
     // near (+Z): a low lip, so the camera can see over it.
     drawSlab(0.0f,  halfZ + thick * 0.5f, spanX, thick, cfg::kF3NearWallHeight);
-    // left (-X) and right (+X): full height, framing the room.
+    // left (-X): full height, framing the room.
     drawSlab(-halfX - thick * 0.5f, 0.0f, thick, spanZ, height);
-    drawSlab( halfX + thick * 0.5f, 0.0f, thick, spanZ, height);
+
+    // right (+X): the same wall, but in two pieces with a gap for the exit
+    // door. The gap is derived from the door constants rather than written out
+    // again, so moving the door in Config.h moves the hole it sits in.
+    const float gapMinZ = cfg::kF3DoorZ - cfg::kF3DoorWidth * 0.5f;
+    const float gapMaxZ = cfg::kF3DoorZ + cfg::kF3DoorWidth * 0.5f;
+
+    const float lowerSpan = gapMinZ - (-halfZ);
+    const float upperSpan = halfZ - gapMaxZ;
+
+    drawSlab(halfX + thick * 0.5f, -halfZ + lowerSpan * 0.5f,
+             thick, lowerSpan, height);
+    drawSlab(halfX + thick * 0.5f, gapMaxZ + upperSpan * 0.5f,
+             thick, upperSpan, height);
 
     // --- the interior walls --------------------------------------------------
     // Straight from the table in Config.h, which is the same data the
@@ -542,6 +594,53 @@ void StealthScene::drawVisionCone() {
         playerSeen_ ? cfg::kF3ConeAlpha * 1.8f : cfg::kF3ConeAlpha,
         1.0f);
     renderer.setDepthWrite(true);
+}
+
+void StealthScene::drawDoor() {
+    Renderer& renderer = ctx().renderer;
+
+    const bool open = doorIsOpen();
+
+    const float x      = cfg::kF3RoomHalfX + cfg::kF3WallThick * 0.5f;
+    const float z      = cfg::kF3DoorZ;
+    const float width  = cfg::kF3DoorWidth;
+    const float height = cfg::kF3DoorHeight;
+    const float thick  = cfg::kF3WallThick;
+
+    const glm::vec3 panelColor = open ? cfg::kF3DoorOpen : cfg::kF3DoorLocked;
+
+    // The panel filling the gap in the wall. Emissive once it is open, so the
+    // way out is the brightest thing in the room and reads from anywhere.
+    renderer.drawBoxAt(glm::vec3(x, height * 0.5f, z),
+                       glm::vec3(thick * 0.92f, height, width),
+                       panelColor, 1.0f, open ? 0.75f : 0.10f);
+
+    // A stone frame around it, so the gap reads as a doorway rather than as a
+    // missing piece of wall.
+    const float jamb = 0.22f;
+    for (int side = 0; side < 2; ++side) {
+        const float offset = (side == 0 ? -1.0f : 1.0f) * (width * 0.5f + jamb * 0.5f);
+        renderer.drawBoxAt(glm::vec3(x, cfg::kF3WallHeight * 0.5f, z + offset),
+                           glm::vec3(thick * 1.08f, cfg::kF3WallHeight, jamb),
+                           cfg::kF3DoorFrame);
+    }
+
+    // The lintel across the top, filling the wall above the shorter door.
+    const float lintelHeight = cfg::kF3WallHeight - height;
+    renderer.drawBoxAt(
+        glm::vec3(x, height + lintelHeight * 0.5f, z),
+        glm::vec3(thick * 1.08f, lintelHeight, width + jamb * 2.0f),
+        cfg::kF3DoorFrame);
+
+    // A pool of light spilling onto the deck in front of an open door. It is
+    // the only cue that points at the exit from across the room.
+    if (open) {
+        renderer.setDepthWrite(false);
+        renderer.drawCylinderAt(glm::vec3(cfg::kF3RoomHalfX - 0.9f, 0.025f, z),
+                                glm::vec3(3.6f, 0.02f, 3.6f),
+                                cfg::kF3DoorOpen, 0.16f, 1.0f);
+        renderer.setDepthWrite(true);
+    }
 }
 
 void StealthScene::drawItems() {
@@ -734,6 +833,20 @@ void StealthScene::drawUi() {
                   - TextRenderer::measureWidth(pawLabel, px(cfg::kHintScale)),
               px(24.0f), px(cfg::kHintScale),
               allFound ? cfg::kTextComplete : cfg::kF3ItemPaw);
+
+    // The door's state, so the player knows what the paws are FOR before they
+    // have walked all the way across the level to find out.
+    if (lockedFlashTimer_ > 0.0f) {
+        const std::string lockedMessage =
+            "THE DOOR IS LOCKED - FIND ALL " + std::to_string(cfg::kF3ItemCount)
+            + " PAWS";
+        text.drawCentered(lockedMessage, centerX, bottom - px(196.0f),
+                          px(cfg::kHintScale), cfg::kTextLocked);
+    } else if (doorIsOpen()) {
+        text.drawCentered("THE DOOR IS OPEN - GET OUT",
+                          centerX, bottom - px(196.0f),
+                          px(cfg::kHintScale), cfg::kTextComplete);
+    }
 
     // Being seen has no consequence yet - that is the suspicion meter and the
     // fail state, next step. For now it just says so plainly.

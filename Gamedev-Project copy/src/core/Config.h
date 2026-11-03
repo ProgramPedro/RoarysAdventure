@@ -452,6 +452,34 @@ inline constexpr float kF3ItemBobSpeed   = 2.10f;
 inline constexpr float kF3ItemSpinSpeed  = 48.0f;  // degrees per second
 inline constexpr float kF3ItemScale      = 1.65f;
 
+//-----------------------------------------------------------------------------
+// THE EXIT DOOR
+//
+// Set into the RIGHT (+X) wall near the +Z end - the bottom right of the
+// screen - so it is diagonally opposite where Roary starts and reaching it
+// means having crossed the floor. It opens only once every paw has been
+// collected, and walking into it is what finishes the level.
+//
+// The door is a TRIGGER, not a hole: Roary is still stopped by the outer wall
+// at +kF3RoomHalfX. Stepping into the zone in front of the door is what counts
+// as going through it, which avoids having to special-case the clamp.
+//-----------------------------------------------------------------------------
+inline constexpr float kF3DoorZ      = 6.00f;  // centre along the right wall
+inline constexpr float kF3DoorWidth  = 2.60f;  // how much of the wall it fills
+inline constexpr float kF3DoorHeight = 1.45f;
+
+// How close Roary has to get. Comfortably larger than his radius, so brushing
+// the door counts rather than demanding he line up exactly.
+inline constexpr float kF3DoorTriggerRadius = 1.80f;
+
+inline constexpr glm::vec3 kF3DoorLocked {0.451f, 0.149f, 0.173f}; // #73262C dull red
+inline constexpr glm::vec3 kF3DoorOpen   {0.333f, 0.871f, 0.522f}; // #55DE85 green
+inline constexpr glm::vec3 kF3DoorFrame  {0.310f, 0.467f, 0.502f}; // #4F7780 stone frame
+
+// How long the LOCKED message flashes after walking into a door you cannot
+// open yet. Long enough to read, short enough not to nag.
+inline constexpr float kF3LockedFlashTime = 1.60f;
+
 // CAMERA: a fixed angled overhead view framing the whole room at once. For a
 // stealth level this beats a follow camera - the player has to see where every
 // guard is to plan a route, and a camera that chases Roary hides exactly the

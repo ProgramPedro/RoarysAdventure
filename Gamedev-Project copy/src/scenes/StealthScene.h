@@ -13,7 +13,7 @@
 //   [~] a vision cone, and whether it can actually see Roary
 //   [ ] a suspicion meter, and failing the level when it fills
 //   [x] key items to pick up
-//   [ ] the locked door, which is the win condition
+//   [x] the locked door, which is the win condition
 //   [ ] throwable rocks that distract guards
 //
 // CONTROLS
@@ -58,6 +58,17 @@ private:
     // Split out because the guards and the thrown rocks will want the same test.
     glm::vec3 clampToRoom(const glm::vec3& position, float radius) const;
 
+    // True once every paw has been collected and the door will open.
+    bool doorIsOpen() const;
+
+    // Checks whether Roary has reached the door, and finishes the level if it
+    // is open. Starts the LOCKED flash if it is not.
+    void checkDoor();
+
+    // Ends the level: marks floor 3 complete, which unlocks floor 4, and goes
+    // back to the tower. The one call the whole level has been building to.
+    void finishLevel();
+
     // Collects any item Roary is standing close enough to.
     void collectNearbyItems();
 
@@ -86,6 +97,7 @@ private:
     void drawGuard();
     void drawVisionCone();
     void drawItems();
+    void drawDoor();
     void drawUi();
 
     // Converts a design-pixel measurement into real framebuffer pixels, so the
@@ -126,6 +138,11 @@ private:
     // Recomputed once per update and then read by the drawing code, so the
     // cone's colour and the HUD cannot disagree about what the guard sees.
     bool playerSeen_ = false;
+
+    // Counts down after walking into a door that will not open, so the LOCKED
+    // message flashes rather than the attempt doing nothing visible. Same
+    // trick the level-select screen uses for locked floors.
+    float lockedFlashTimer_ = 0.0f;
 
     bool  sneaking_    = false;
     float elapsedTime_ = 0.0f;
