@@ -3,6 +3,7 @@
 #include "core/Camera.h"
 #include "core/GameProgress.h"
 #include "core/Input.h"
+#include "core/MascotModels.h"
 #include "core/Renderer.h"
 #include "core/SceneContext.h"
 #include "core/SceneManager.h"
@@ -105,22 +106,6 @@ glm::mat4 hangingTransform(const glm::vec3& pivot, const glm::vec3& size,
     model = glm::translate(model, glm::vec3(0.0f, -size.y * 0.5f, 0.0f));
     model = glm::scale(model, size);
     return model;
-}
-
-// Both eyes at once: a pale eyeball with a dark pupil sitting slightly proud
-// of it. `center` is the midpoint between the two eyes.
-void drawEyePair(Renderer& renderer, const glm::vec3& center, float spacing,
-                 float size, const glm::vec3& eyeColor,
-                 const glm::vec3& pupilColor) {
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -1.0f : 1.0f) * spacing * 0.5f;
-
-        renderer.drawSphereAt(center + glm::vec3(x, 0.0f, 0.0f),
-                              glm::vec3(size, size, size * 0.72f), eyeColor);
-        renderer.drawSphereAt(center + glm::vec3(x, 0.0f, size * 0.30f),
-                              glm::vec3(size * 0.46f, size * 0.52f, size * 0.30f),
-                              pupilColor);
-    }
 }
 
 } // namespace
@@ -695,7 +680,7 @@ void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool loc
     renderer.drawSphereAt(head + glm::vec3(-0.22f, 0.26f, 0.03f),
                           glm::vec3(0.06f, 0.06f, 0.05f), gold);
 
-    drawEyePair(renderer, head + glm::vec3(0.0f, 0.05f, 0.16f), 0.19f, 0.09f,
+    mascots::drawEyePair(renderer, head + glm::vec3(0.0f, 0.05f, 0.16f), 0.19f, 0.09f,
                 shade(cfg::kEyeWhite, locked), shade(cfg::kEyeDark, locked));
 
     // The cage: vertical bars across the front, with a rail top and bottom.
@@ -761,7 +746,7 @@ void LevelSelectScene::drawOwl(const glm::vec3& feetPosition, bool locked) {
 
     // Big blue eyes, and the bright orange brows that are his signature. The
     // brows angle down toward the middle, which is what gives him that scowl.
-    drawEyePair(renderer, head + glm::vec3(0.0f, 0.04f, 0.17f), 0.24f, 0.14f,
+    mascots::drawEyePair(renderer, head + glm::vec3(0.0f, 0.04f, 0.17f), 0.24f, 0.14f,
                 shade(cfg::kOwlEye, locked), shade(cfg::kEyeDark, locked));
 
     for (int side = 0; side < 2; ++side) {
@@ -823,7 +808,7 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
     renderer.drawSphereAt(head + glm::vec3(0.0f, -0.03f, 0.21f),
                           glm::vec3(0.13f, 0.08f, 0.34f), bill);
 
-    drawEyePair(renderer, head + glm::vec3(0.0f, 0.06f, 0.10f), 0.15f, 0.07f,
+    mascots::drawEyePair(renderer, head + glm::vec3(0.0f, 0.06f, 0.10f), 0.15f, 0.07f,
                 shade(cfg::kEyeWhite, locked), shade(cfg::kEyeDark, locked));
 
     // His little sailor hat, with the green band.
@@ -963,57 +948,9 @@ void LevelSelectScene::drawRoary() {
     renderer.drawCylinderAt(feet + glm::vec3(0.0f, -0.08f, 0.0f),
                             glm::vec3(1.30f, 0.16f, 1.20f), cfg::kRoaryAccent);
 
-    // He is built at a natural height of 1.42 units; this rescales every
-    // measurement below if kRoarySize is changed.
-    const float k = cfg::kRoarySize.y / 1.42f;
-    const auto at = [&](float x, float y, float z) {
-        return feet + glm::vec3(x * k, y * k, z * k);
-    };
-    const auto size = [&](float x, float y, float z) {
-        return glm::vec3(x * k, y * k, z * k);
-    };
-
-    const glm::vec3 fur   = cfg::kPantherFur;
-    const glm::vec3 cream = cfg::kPantherCream;
-    const glm::vec3 kit   = cfg::kFiuKit;
-
-    // Legs and navy shorts.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.13f : 0.13f);
-        renderer.drawCylinderAt(at(x, 0.14f, 0.0f), size(0.15f, 0.28f, 0.15f), fur);
-    }
-    renderer.drawSphereAt(at(0.0f, 0.38f, 0.0f), size(0.50f, 0.28f, 0.44f), kit);
-
-    // Navy jersey over a round chest, with white lettering.
-    renderer.drawSphereAt(at(0.0f, 0.66f, 0.0f), size(0.54f, 0.50f, 0.46f), kit);
-    renderer.drawSphereAt(at(0.0f, 0.70f, 0.21f), size(0.24f, 0.11f, 0.05f),
-                          cfg::kFiuKitTrim);
-
-    // Arms.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.31f : 0.31f);
-        renderer.drawSphereAt(at(x, 0.64f, 0.0f), size(0.15f, 0.34f, 0.15f), fur);
-    }
-
-    // Head, muzzle and nose.
-    const glm::vec3 head = at(0.0f, 1.06f, 0.0f);
-    renderer.drawSphereAt(head, size(0.56f, 0.52f, 0.50f), fur);
-    renderer.drawSphereAt(head + glm::vec3(0.0f, -0.09f, 0.19f) * k,
-                          size(0.32f, 0.22f, 0.22f), cream);
-    renderer.drawSphereAt(head + glm::vec3(0.0f, -0.03f, 0.30f) * k,
-                          size(0.09f, 0.07f, 0.06f), cfg::kPantherNose);
-
-    // Ears.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.21f : 0.21f);
-        renderer.drawSphereAt(head + glm::vec3(x, 0.24f, 0.0f) * k,
-                              size(0.19f, 0.21f, 0.14f), fur);
-        renderer.drawSphereAt(head + glm::vec3(x, 0.24f, 0.05f) * k,
-                              size(0.10f, 0.12f, 0.08f), cfg::kPantherInner);
-    }
-
-    drawEyePair(renderer, head + glm::vec3(0.0f, 0.06f, 0.20f) * k,
-                0.23f * k, 0.11f * k, cfg::kEyeWhite, cfg::kEyeDark);
+    // The character himself is shared with the levels, so there is exactly
+    // one Roary in the project.
+    mascots::drawRoary(renderer, feet, cfg::kRoarySize.y, 0.0f);
 }
 
 //=============================================================================
