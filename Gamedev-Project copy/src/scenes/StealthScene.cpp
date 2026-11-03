@@ -334,7 +334,7 @@ void StealthScene::collectNearbyItems() {
     const float radiusSquared = cfg::kF3ItemPickupRadius * cfg::kF3ItemPickupRadius;
 
     for (int i = 0; i < cfg::kF3ItemCount; ++i) {
-        if (itemCollected_[i]) {
+        if (itemCollected_[static_cast<std::size_t>(i)]) {
             continue;
         }
 
@@ -346,7 +346,7 @@ void StealthScene::collectNearbyItems() {
         // hovers, so including Y would make the hover height part of the
         // pickup range by accident.
         if (dx * dx + dz * dz <= radiusSquared) {
-            itemCollected_[i] = true;
+            itemCollected_[static_cast<std::size_t>(i)] = true;
         }
     }
 }
@@ -1813,7 +1813,7 @@ void StealthScene::drawItems() {
     const float k = cfg::kF3ItemScale;
 
     for (int i = 0; i < cfg::kF3ItemCount; ++i) {
-        if (itemCollected_[i]) {
+        if (itemCollected_[static_cast<std::size_t>(i)]) {
             continue;
         }
 

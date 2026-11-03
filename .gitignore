@@ -1,0 +1,13 @@
+# Editor and OS files that are specific to one machine.
+# .vscode/settings.json holds an absolute cmake.sourceDirectory path, so
+# committing it would break the CMake integration for everyone else.
+.vscode/
+.vs/
+.idea/
+.DS_Store
+
+# Build output. The real build settings live in CMakePresets.json.
+out/
+build/
+vcpkg_installed/
+compile_commands.json
