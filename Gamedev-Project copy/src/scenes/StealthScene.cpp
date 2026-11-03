@@ -71,6 +71,8 @@
 
 #include "scenes/StealthScene.h"
 
+#include "scenes/Characters.h"   // drawRoary() and shortestAngleDelta()
+
 #include "core/Camera.h"
 #include "core/Config.h"
 #include "core/GameProgress.h"
@@ -99,13 +101,6 @@
 
 namespace {
 
-// Shortest signed difference between two angles in degrees, in -180..180.
-// Without this, turning from 350 degrees to 10 takes the long way round and
-// Roary spins almost all the way through a circle to face forward.
-float shortestAngleDelta(float fromDeg, float toDeg) {
-    float delta = std::fmod(toDeg - fromDeg + 540.0f, 360.0f) - 180.0f;
-    return delta;
-}
 
 
 // The vertical FOV that keeps the HORIZONTAL field of view fixed at the design
@@ -170,7 +165,9 @@ bool StealthScene::init() {
     // edited into Config.h can never drop him inside a wall.
     playerPos_   = clampToRoom(cfg::kF3StartPos, cfg::kF3PlayerRadius);
     moveDir_     = glm::vec2(0.0f);
-    facingDeg_   = 180.0f;   // looking toward the camera, into the room
+    // 180 degrees looks down -Z: away from the camera and into the room, which
+    // is the direction he has to travel. (0 would face back at the camera.)
+    facingDeg_   = 180.0f;
     walkCycle_   = 0.0f;
     sneaking_    = false;
     elapsedTime_ = 0.0f;
@@ -1871,98 +1868,13 @@ void StealthScene::drawItems() {
 }
 
 void StealthScene::drawRoary() {
-    Renderer& renderer = ctx().renderer;
-
-    const bool walking = (moveDir_ != glm::vec2(0.0f));
-
-    // The walk bounce, and a slight lean into the direction of travel. Both
-    // stop when he does.
-    const float bob = walking
-        ? std::abs(std::sin(walkCycle_)) * cfg::kF3BobAmount
-        : 0.0f;
-
-    const glm::vec3 feet = playerPos_ + glm::vec3(0.0f, bob, 0.0f);
-
-    // --- blob shadow ---------------------------------------------------------
-    // Drawn first and flat on the deck. Translucent, so depth writes are off
-    // or it would punch a hole in the floor behind it.
-    renderer.setDepthWrite(false);
-    renderer.drawCylinderAt(glm::vec3(playerPos_.x, 0.015f, playerPos_.z),
-                            glm::vec3(cfg::kF3PlayerRadius * 2.3f, 0.02f,
-                                      cfg::kF3PlayerRadius * 2.3f),
-                            cfg::kF3ShadowColor, cfg::kF3ShadowAlpha, 1.0f);
-    renderer.setDepthWrite(true);
-
-    // --- the panther ---------------------------------------------------------
-    // Built the same way as the Roary on the level-select screen: squashed
-    // spheres at a natural height of 1.42 units, scaled by k. The difference
-    // here is that he turns, so every part is positioned by rotating its local
-    // offset about Y and is drawn with that same rotation.
-    const float k = cfg::kF3PlayerScale;
-    const float facingRad = glm::radians(facingDeg_);
-    const float sinF = std::sin(facingRad);
-    const float cosF = std::cos(facingRad);
-
-    // Local space: +Z is the direction he faces, +X is his left.
-    const auto at = [&](float x, float y, float z) {
-        return feet + glm::vec3((x * cosF + z * sinF) * k,
-                                 y * k,
-                                (-x * sinF + z * cosF) * k);
-    };
-    const auto size = [&](float x, float y, float z) {
-        return glm::vec3(x * k, y * k, z * k);
-    };
-    const glm::vec3 spin(0.0f, facingDeg_, 0.0f);
-
-    const auto sphere = [&](const glm::vec3& center, const glm::vec3& sz,
-                            const glm::vec3& color) {
-        renderer.drawSphere(makeTransform(center, sz, spin), color);
-    };
-
-    const glm::vec3 fur   = cfg::kPantherFur;
-    const glm::vec3 cream = cfg::kPantherCream;
-    const glm::vec3 kit   = cfg::kFiuKit;
-
-    // Legs swing in opposite phase so the walk reads from above.
-    const float stride = walking ? std::sin(walkCycle_) * 0.16f : 0.0f;
-    for (int side = 0; side < 2; ++side) {
-        const float x    = (side == 0 ? -0.13f : 0.13f);
-        const float step = (side == 0 ? stride : -stride);
-        renderer.drawCylinder(
-            makeTransform(at(x, 0.14f, step), size(0.15f, 0.28f, 0.15f), spin), fur);
-    }
-
-    // Navy shorts, then the jersey over a round chest with white lettering.
-    sphere(at(0.0f, 0.38f, 0.0f), size(0.50f, 0.28f, 0.44f), kit);
-    sphere(at(0.0f, 0.66f, 0.0f), size(0.54f, 0.50f, 0.46f), kit);
-    sphere(at(0.0f, 0.70f, 0.21f), size(0.24f, 0.11f, 0.05f), cfg::kFiuKitTrim);
-
-    // Arms, swinging opposite their leg on the same side.
-    for (int side = 0; side < 2; ++side) {
-        const float x    = (side == 0 ? -0.31f : 0.31f);
-        const float step = (side == 0 ? -stride : stride);
-        sphere(at(x, 0.64f, step * 0.8f), size(0.15f, 0.34f, 0.15f), fur);
-    }
-
-    // Head, muzzle, nose.
-    sphere(at(0.0f, 1.06f, 0.0f),  size(0.56f, 0.52f, 0.50f), fur);
-    sphere(at(0.0f, 0.97f, 0.19f), size(0.32f, 0.22f, 0.22f), cream);
-    sphere(at(0.0f, 1.03f, 0.30f), size(0.09f, 0.07f, 0.06f), cfg::kPantherNose);
-
-    // Ears. Worth the four draws: from this overhead camera they are the part
-    // of him that most clearly shows which way he is pointing.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.21f : 0.21f);
-        sphere(at(x, 1.30f, 0.00f), size(0.19f, 0.21f, 0.14f), fur);
-        sphere(at(x, 1.30f, 0.05f), size(0.10f, 0.12f, 0.08f), cfg::kPantherInner);
-    }
-
-    // Eyes.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.115f : 0.115f);
-        sphere(at(x, 1.12f, 0.20f), size(0.13f, 0.14f, 0.08f), cfg::kEyeWhite);
-        sphere(at(x, 1.12f, 0.24f), size(0.07f, 0.08f, 0.05f), cfg::kEyeDark);
-    }
+    // The panther himself lives in scenes/Characters.cpp, because the boss
+    // level draws exactly the same character. All this scene has to do is say
+    // where he is and what he is doing.
+    // The leading :: matters: without it the compiler finds this member
+    // function again and the call recurses into itself forever.
+    ::drawRoary(ctx().renderer, playerPos_, facingDeg_, walkCycle_,
+                moveDir_ != glm::vec2(0.0f), cfg::kF3PlayerScale);
 }
 
 // Converts a measurement written in "design pixels" into real screen pixels.

@@ -619,6 +619,119 @@ inline constexpr float kF3DesignAspect = 1.60f;  // 1280x800, the default window
 inline constexpr glm::vec3 kF4Wall    {0.353f, 0.063f, 0.188f}; // #5A1030 deep crimson
 inline constexpr glm::vec3 kF4CageBar {0.604f, 0.639f, 0.678f}; // #9AA3AD silver
 
+//=============================================================================
+// TOP FLOOR GAMEPLAY - "RIVAL SHOWDOWN"
+//
+// A dodging fight on the open castle roof. Unlike floor 3 the arena is ROUND
+// and completely empty: no walls, no cover, nowhere to hide. That is
+// deliberate, and it has two nice consequences for the code -
+//
+//   * collision is one distance-from-the-centre check instead of a list of
+//     wall slabs, so it is simpler than floor 3's, not harder
+//   * with nothing to walk around, the bosses need no pathfinding at all
+//
+// THE PLAN (being built in pieces, like floor 3 was):
+//   [x] the arena, Roary, and the dash
+//   [ ] Rocky the bull: charge, miss, crash into the parapet
+//   [ ] Owlsley and Sebastian joining the attack rotation
+//   [ ] punish windows - touching a stunned boss is how you damage it
+//
+// THE DASH IS THE WHOLE FIGHT. Roary has no attack button. He moves, and he
+// dashes, and that is the entire control scheme. The dash does two jobs:
+//   1. it gets you out of an attack you misjudged (invincible while dashing)
+//   2. it gets you IN to a stunned boss to punish it
+// The long cooldown is what gives the fight its rhythm - dash in, then spend
+// the recharge walking out of trouble.
+//=============================================================================
+
+inline constexpr float kF4ArenaRadius   = 11.0f;  // the walkable roof
+inline constexpr float kF4DeckThickness = 0.30f;
+
+// The low wall around the rim. Kept SHORT on purpose: a tall parapet would
+// stand between the camera and the near half of the arena, which is exactly
+// the problem floor 3 solved by making its near wall a lip.
+inline constexpr float kF4ParapetHeight = 0.55f;
+inline constexpr float kF4ParapetThick  = 0.55f;
+inline constexpr int   kF4ParapetSegs   = 40;     // boxes making up the ring
+inline constexpr int   kF4MerlonCount   = 20;     // battlements on top of it
+inline constexpr float kF4MerlonHeight  = 0.42f;
+
+// Deck colouring. Concentric rings rather than floor 3's checkerboard, because
+// on a round arena rings tell you how far from the EDGE you are - which is the
+// thing you need to know when you are backing away from a charging bull.
+inline constexpr glm::vec3 kF4DeckA  {0.180f, 0.055f, 0.098f}; // #2E0E19 dark
+inline constexpr glm::vec3 kF4DeckB  {0.231f, 0.075f, 0.129f}; // #3B1321 lighter
+inline constexpr glm::vec3 kF4Rim    {0.482f, 0.176f, 0.278f}; // #7B2D47 rim light
+inline constexpr int       kF4DeckRings = 5;
+
+// Roary. Slightly quicker than in the stealth level - this is an action floor
+// and sneaking is not a thing up here.
+inline constexpr float kF4PlayerRadius = 0.42f;
+inline constexpr float kF4PlayerScale  = 1.55f;
+inline constexpr float kF4WalkSpeed    = 5.80f;
+inline constexpr float kF4TurnSpeed    = 13.0f;
+inline constexpr float kF4BobSpeed     = 11.0f;
+inline constexpr glm::vec3 kF4StartPos {0.0f, 0.0f, 6.0f};  // near the front rim
+
+//-----------------------------------------------------------------------------
+// THE DASH  (space bar)
+//
+// A short, fast burst in whichever direction he is already heading, during
+// which he cannot be hurt.
+//
+// The numbers matter to each other, so change them together:
+//   speed * duration = how far he travels (about 4.8 units here, a bit over
+//   two body lengths - far enough to clear an attack, short enough that it is
+//   not a teleport across the arena).
+//
+// The cooldown starts when the dash STARTS, not when it ends, so the full
+// cycle really is kF4DashCooldown seconds end to end.
+//-----------------------------------------------------------------------------
+inline constexpr float kF4DashSpeed    = 22.0f;
+inline constexpr float kF4DashDuration = 0.22f;
+inline constexpr float kF4DashCooldown = 5.00f;
+
+// Ghost images left behind during the dash, so the movement reads as a dash
+// and not as a one-frame teleport.
+inline constexpr int   kF4DashTrailCount = 4;
+inline constexpr float kF4DashTrailAlpha = 0.30f;
+
+// While invincible he is washed toward this colour, which is the only signal
+// the player gets that the i-frames are actually active.
+inline constexpr glm::vec3 kF4InvulnTint   {0.780f, 0.925f, 1.000f}; // pale blue
+inline constexpr float     kF4InvulnTintMix = 0.55f;
+
+//-----------------------------------------------------------------------------
+// HEALTH
+//
+// Three hits and the fight restarts. Forgiving on purpose: the fight is short,
+// so the player should be learning the attack patterns rather than replaying
+// the opening of it.
+//-----------------------------------------------------------------------------
+inline constexpr int   kF4MaxHearts    = 3;
+inline constexpr float kF4HeartSize    = 20.0f;  // design pixels
+inline constexpr float kF4HeartGap     = 8.0f;
+inline constexpr glm::vec3 kF4HeartFull  {0.961f, 0.345f, 0.345f};
+inline constexpr glm::vec3 kF4HeartEmpty {0.290f, 0.180f, 0.216f};
+
+// Dash readiness pip, drawn next to the hearts.
+inline constexpr float     kF4DashPipWidth = 120.0f;  // design pixels
+inline constexpr glm::vec3 kF4DashReady    {0.420f, 0.918f, 0.784f}; // mint
+inline constexpr glm::vec3 kF4DashCharging {0.400f, 0.290f, 0.333f};
+
+//-----------------------------------------------------------------------------
+// CAMERA  (solved the same way floor 3's was - see kF3DesignAspect)
+//-----------------------------------------------------------------------------
+// Solved by projecting the arena rim through the real Camera and searching
+// for the framing that fills the most screen while staying clear of the title
+// and the hint lines. 55 degrees rather than the slightly roomier 43: a round
+// arena seen from a shallow angle squashes into a flat ellipse, and judging
+// how far away a charging bull is gets much harder. The steeper view costs
+// about 7% of the screen width and is worth it.
+inline constexpr glm::vec3 kF4CameraPos    {0.0f, 27.44f, 21.71f};
+inline constexpr glm::vec3 kF4CameraTarget {0.0f, 0.0f, 2.50f};
+inline constexpr float     kF4CameraFovDeg = 46.0f;
+
 
 //-----------------------------------------------------------------------------
 // FLOOR METADATA  (name + one-line description shown on the menu)

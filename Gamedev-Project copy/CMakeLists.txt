@@ -28,6 +28,8 @@ add_executable(roary
     # --- scenes --------------------------------------------------------------
     src/scenes/LevelSelectScene.cpp
     src/scenes/PlaceholderLevelScene.cpp
+    src/scenes/Characters.cpp
+    src/scenes/BossScene.cpp
     src/scenes/StealthScene.cpp
 )
 
