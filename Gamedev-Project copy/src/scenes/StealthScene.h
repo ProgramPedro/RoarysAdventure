@@ -10,7 +10,8 @@
 //   [x] the scene exists, is reachable, and can report the floor complete
 //   [x] the room, and Roary walking around it with wall collision
 //   [~] a guard, standing still - patrol routes still to come
-//   [ ] vision cones and being spotted
+//   [~] a vision cone, and whether it can actually see Roary
+//   [ ] a suspicion meter, and failing the level when it fills
 //   [ ] key items to pick up
 //   [ ] the locked door, which is the win condition
 //   [ ] throwable rocks that distract guards
@@ -55,6 +56,15 @@ private:
     // Split out because the guards and the thrown rocks will want the same test.
     glm::vec3 clampToRoom(const glm::vec3& position, float radius) const;
 
+    // True when the guard can see Roary right now: in range, inside the cone's
+    // half-angle, and with no wall between them.
+    bool guardCanSeePlayer() const;
+
+    // Whether the straight line from `from` to `to` crosses any interior wall.
+    // This is the line-of-sight test, and it is why a guard cannot see through
+    // a divider. Static because it is pure geometry over the Config table.
+    static bool lineCrossesWall(const glm::vec3& from, const glm::vec3& to);
+
     // Pushes a position back out of any interior wall it has ended up inside,
     // moving it on ONE axis only. Called once per axis after moving on that
     // axis: resolving the two separately is what lets Roary slide along a wall
@@ -66,6 +76,7 @@ private:
     void drawRoom();
     void drawRoary();
     void drawGuard();
+    void drawVisionCone();
     void drawUi();
 
     // Converts a design-pixel measurement into real framebuffer pixels, so the
@@ -96,6 +107,10 @@ private:
     // there is a second one and some behaviour worth grouping.
     glm::vec3 guardPos_{0.0f};
     float     guardFacingDeg_ = 0.0f;
+
+    // Recomputed once per update and then read by the drawing code, so the
+    // cone's colour and the HUD cannot disagree about what the guard sees.
+    bool playerSeen_ = false;
 
     bool  sneaking_    = false;
     float elapsedTime_ = 0.0f;

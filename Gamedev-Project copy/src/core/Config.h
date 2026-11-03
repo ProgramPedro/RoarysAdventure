@@ -391,6 +391,30 @@ inline constexpr glm::vec3 kF3GuardStart   {1.0f, 0.0f, -2.0f};
 // Angled rather than square-on so he reads as a solid figure, not a flat tile.
 inline constexpr float     kF3GuardFacing  = 35.0f;
 
+//-----------------------------------------------------------------------------
+// GUARD VISION
+//
+// A guard sees Roary when all three of these hold: he is within range, he is
+// inside the cone's half-angle, and no wall stands between them. The checks
+// run in that order because each is more expensive than the last.
+//
+// The cone is drawn as a flat wedge lying on the deck rather than a beam from
+// the guard's eyes. In a top-down stealth level the question the player is
+// always asking is "which floor is dangerous", and a shape on the floor
+// answers it directly.
+//-----------------------------------------------------------------------------
+inline constexpr float kF3VisionRange        = 9.0f;   // world units
+inline constexpr float kF3VisionHalfAngleDeg = 30.0f;  // half the cone's spread
+
+// Where the wedge sits and how thick it is. Low and thin, so it reads as light
+// on the floor instead of a solid block in the way.
+inline constexpr float kF3ConeApexY  = 0.26f;
+inline constexpr float kF3ConeHeight = 0.40f;
+
+inline constexpr glm::vec3 kF3ConeCalm  {0.675f, 0.886f, 0.937f}; // #ACE2EF pale cyan
+inline constexpr glm::vec3 kF3ConeAlert {0.961f, 0.345f, 0.286f}; // #F55849 alarm red
+inline constexpr float     kF3ConeAlpha = 0.20f;
+
 // CAMERA: a fixed angled overhead view framing the whole room at once. For a
 // stealth level this beats a follow camera - the player has to see where every
 // guard is to plan a route, and a camera that chases Roary hides exactly the

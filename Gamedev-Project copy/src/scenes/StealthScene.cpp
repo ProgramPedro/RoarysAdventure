@@ -11,11 +11,13 @@
 #include <GLFW/glfw3.h>
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -41,6 +43,31 @@ float fovForAspect(float baseFovDeg, float aspect) {
         std::tan(glm::radians(baseFovDeg * 0.5f)) * cfg::kF3DesignAspect;
 
     return glm::degrees(2.0f * std::atan(halfWidth / aspect));
+}
+
+// A wedge whose APEX sits at `apex` and whose body runs `range` units along
+// `facingDeg`. Built by hand rather than through makeTransform because the
+// pyramid primitive points along +Y and has to be tipped over and shifted so
+// it grows forward from its tip instead of around its centre. Same idea as
+// hangingTransform() in LevelSelectScene, one axis over.
+glm::mat4 visionConeTransform(const glm::vec3& apex, float facingDeg,
+                              float range, float width, float thickness) {
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, apex);
+
+    // Aim it, then tip the pyramid so its local -Y (the direction the body
+    // extends once it is shifted) points along world +Z before the aiming
+    // rotation takes effect.
+    model = glm::rotate(model, glm::radians(facingDeg), glm::vec3(0, 1, 0));
+    model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1, 0, 0));
+
+    // Shift back by half the length so the TIP lands on the apex rather than
+    // the middle of the wedge.
+    model = glm::translate(model, glm::vec3(0.0f, -range * 0.5f, 0.0f));
+
+    // After the tip, local Y is the cone's length and local Z is its height.
+    model = glm::scale(model, glm::vec3(width, range, thickness));
+    return model;
 }
 
 } // namespace
@@ -116,6 +143,96 @@ glm::vec3 StealthScene::clampToRoom(const glm::vec3& position, float radius) con
     return glm::vec3(std::clamp(position.x, -limitX, limitX),
                      position.y,
                      std::clamp(position.z, -limitZ, limitZ));
+}
+
+bool StealthScene::lineCrossesWall(const glm::vec3& from, const glm::vec3& to) {
+    // The classic slab test, in 2D. Walk the segment as a parametric line and
+    // keep narrowing the interval of t where it could still be inside the box;
+    // if the interval survives both axes, the segment and the box overlap.
+    const float dx = to.x - from.x;
+    const float dz = to.z - from.z;
+
+    for (int i = 0; i < cfg::kF3InnerWallCount; ++i) {
+        const cfg::F3WallSlab& wall = cfg::kF3InnerWalls[i];
+
+        const float minX = wall.centerX - wall.sizeX * 0.5f;
+        const float maxX = wall.centerX + wall.sizeX * 0.5f;
+        const float minZ = wall.centerZ - wall.sizeZ * 0.5f;
+        const float maxZ = wall.centerZ + wall.sizeZ * 0.5f;
+
+        float enter = 0.0f;
+        float exit  = 1.0f;
+        bool  missed = false;
+
+        // One pass per axis. Written as a loop over {x, z} so the near-zero
+        // case - a segment running exactly parallel to a wall - is handled the
+        // same way on both axes instead of being special-cased twice.
+        const float origin[2] = {from.x, from.z};
+        const float delta[2]  = {dx, dz};
+        const float lower[2]  = {minX, minZ};
+        const float upper[2]  = {maxX, maxZ};
+
+        for (int axis = 0; axis < 2 && !missed; ++axis) {
+            if (std::fabs(delta[axis]) < 1e-6f) {
+                // Parallel to this pair of faces: it can only ever hit if it
+                // already starts between them.
+                if (origin[axis] < lower[axis] || origin[axis] > upper[axis]) {
+                    missed = true;
+                }
+                continue;
+            }
+
+            float t1 = (lower[axis] - origin[axis]) / delta[axis];
+            float t2 = (upper[axis] - origin[axis]) / delta[axis];
+            if (t1 > t2) {
+                std::swap(t1, t2);
+            }
+
+            enter = std::max(enter, t1);
+            exit  = std::min(exit,  t2);
+
+            if (enter > exit) {
+                missed = true;
+            }
+        }
+
+        if (!missed) {
+            return true;   // this wall blocks the line
+        }
+    }
+
+    return false;
+}
+
+bool StealthScene::guardCanSeePlayer() const {
+    const glm::vec3 toPlayer = playerPos_ - guardPos_;
+    const float distance = std::sqrt(toPlayer.x * toPlayer.x +
+                                     toPlayer.z * toPlayer.z);
+
+    // 1. Range. Cheapest test, so it goes first.
+    if (distance > cfg::kF3VisionRange) {
+        return false;
+    }
+
+    // Standing exactly on the guard counts as seen, and also makes the
+    // normalize below undefined, so deal with it here.
+    if (distance < 1e-4f) {
+        return true;
+    }
+
+    // 2. Angle. Comparing cosines avoids an acos per frame, and the half-angle
+    // cosine is a compile-time constant.
+    const float facingRad = glm::radians(guardFacingDeg_);
+    const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
+
+    const float alignment = (toPlayer.x * forward.x + toPlayer.z * forward.z) / distance;
+    if (alignment < std::cos(glm::radians(cfg::kF3VisionHalfAngleDeg))) {
+        return false;
+    }
+
+    // 3. Line of sight. Most expensive, and only reached by someone already
+    // standing in the cone.
+    return !lineCrossesWall(guardPos_, playerPos_);
 }
 
 void StealthScene::resolveInnerWalls(glm::vec3& position, int axis, float delta,
@@ -199,6 +316,10 @@ void StealthScene::movePlayer(float deltaTime) {
 void StealthScene::update(float deltaTime) {
     elapsedTime_ += deltaTime;
     movePlayer(deltaTime);
+
+    // After the move, so the cone and the HUD describe where Roary actually
+    // ended this frame rather than where he started it.
+    playerSeen_ = guardCanSeePlayer();
 }
 
 //=============================================================================
@@ -230,6 +351,7 @@ void StealthScene::render() {
 
     drawRoom();
     drawGuard();
+    drawVisionCone();   // after the guard, so it lies over the deck
     drawRoary();
     drawUi();
 }
@@ -360,6 +482,31 @@ void StealthScene::drawGuard() {
         cfg::kF3GuardVisor, 1.0f, 1.0f);
 }
 
+void StealthScene::drawVisionCone() {
+    Renderer& renderer = ctx().renderer;
+
+    const float range = cfg::kF3VisionRange;
+
+    // Width of the wedge where it ends. A pyramid tapers linearly from its tip,
+    // so setting the far width to the cone's chord makes the drawn shape match
+    // the angle the detection test actually uses.
+    const float width =
+        2.0f * range * std::tan(glm::radians(cfg::kF3VisionHalfAngleDeg));
+
+    const glm::vec3 apex(guardPos_.x, cfg::kF3ConeApexY, guardPos_.z);
+
+    // Translucent, so depth writes go off or the cone hides the floor and the
+    // walls behind it. Emissive, so it glows rather than being lit like solid
+    // geometry - the same treatment the searchlights get on the menu.
+    renderer.setDepthWrite(false);
+    renderer.drawPyramid(
+        visionConeTransform(apex, guardFacingDeg_, range, width, cfg::kF3ConeHeight),
+        playerSeen_ ? cfg::kF3ConeAlert : cfg::kF3ConeCalm,
+        playerSeen_ ? cfg::kF3ConeAlpha * 1.8f : cfg::kF3ConeAlpha,
+        1.0f);
+    renderer.setDepthWrite(true);
+}
+
 void StealthScene::drawRoary() {
     Renderer& renderer = ctx().renderer;
 
@@ -475,6 +622,13 @@ void StealthScene::drawUi() {
 
     text.drawCentered(info.description, centerX, px(80.0f),
                       px(cfg::kDescriptionScale), cfg::kTextDim);
+
+    // Being seen has no consequence yet - that is the suspicion meter and the
+    // fail state, next step. For now it just says so plainly.
+    if (playerSeen_) {
+        text.drawCentered("SPOTTED", centerX, bottom - px(160.0f),
+                          px(cfg::kFloorNameScale), cfg::kF3ConeAlert);
+    }
 
     // Shows the sneak state is actually reaching the simulation. This becomes
     // a real noise indicator once guards can hear, in step 6.
