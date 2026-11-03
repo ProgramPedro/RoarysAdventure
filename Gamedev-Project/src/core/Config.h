@@ -762,6 +762,177 @@ inline constexpr FloorInfo kFloorInfo[kFloorCount] = {
 };
 
 //-----------------------------------------------------------------------------
+// FLOOR 1 - PLATFORMER TUNING
+//
+// Jump feel is driven by two numbers a designer can actually picture: how high
+// the jump goes, and how long it takes to get there. Gravity and launch speed
+// are DERIVED from those, so you never tune a gravity constant by trial and
+// error - change kJumpHeight and the jump still reaches exactly that height.
+//-----------------------------------------------------------------------------
+namespace plat {
+
+inline constexpr float kJumpHeight = 2.30f;  // world units cleared by a full jump
+inline constexpr float kTimeToApex = 0.36f;  // seconds to reach the top
+
+// Standard projectile motion solved for gravity and launch speed.
+inline constexpr float gravity()   { return 2.0f * kJumpHeight / (kTimeToApex * kTimeToApex); }
+inline constexpr float jumpSpeed() { return 2.0f * kJumpHeight / kTimeToApex; }
+
+// Falling under heavier gravity than rising is the single cheapest way to stop
+// a jump feeling floaty.
+inline constexpr float kFallGravityMultiplier = 1.85f;
+
+// Releasing the jump button while still rising cuts the climb short, which is
+// what gives you both a tap-hop and a full jump from one button.
+inline constexpr float kJumpCutMultiplier = 0.45f;
+
+// Two forgiveness windows. Coyote time lets you jump just after walking off an
+// edge; the buffer lets a press land slightly before you touch down and still
+// fire. Without them the controls feel broken even when they are correct.
+inline constexpr float kCoyoteTime     = 0.12f;
+inline constexpr float kJumpBufferTime = 0.12f;
+
+// Horizontal movement. Separate rates for speeding up, slowing down and
+// turning around, and weaker versions of each in the air.
+inline constexpr float kMaxRunSpeed  = 6.4f;
+inline constexpr float kGroundAccel  = 60.0f;
+inline constexpr float kGroundDecel  = 55.0f;
+inline constexpr float kGroundTurn   = 95.0f;
+inline constexpr float kAirAccel     = 34.0f;
+inline constexpr float kAirDecel     = 12.0f;
+inline constexpr float kAirTurn      = 50.0f;
+
+// Roary's collision box. Slightly narrower than he looks, which makes landing
+// on the edge of a platform feel generous rather than fussy.
+inline constexpr glm::vec3 kPlayerSize {0.70f, 1.30f, 0.70f};
+
+// Camera: a fixed angle that follows, rather than one the player rotates.
+inline constexpr glm::vec3 kCameraOffset {0.0f, 6.2f, 15.5f};
+inline constexpr glm::vec3 kCameraLookAt {0.0f, 1.1f, 0.0f};
+inline constexpr float     kCameraFovDeg = 52.0f;
+inline constexpr float     kCameraFollow = 6.5f;   // higher = tighter follow
+
+// Level colors.
+inline constexpr glm::vec3 kPlatformWarm = kF1BlockWarm;
+inline constexpr glm::vec3 kPlatformCool = kF1BlockCool;
+inline constexpr glm::vec3 kPlatformEdge {0.180f, 0.220f, 0.290f}; // side faces
+inline constexpr glm::vec3 kMovingPlatform {0.976f, 0.729f, 0.247f}; // #F9BA3F
+inline constexpr glm::vec3 kGoalColor      {0.345f, 0.957f, 0.667f}; // #58F4AA
+inline constexpr glm::vec3 kShadowColor    {0.020f, 0.040f, 0.080f};
+
+// --- enemies and stomping ---------------------------------------------------
+// The stomp is the mechanic the whole genre is built on: land on something and
+// it dies, and you bounce. Getting the bounce right matters - too little and
+// it feels like a stumble, too much and you lose control.
+inline constexpr float kStompBounceSpeed = 10.5f;
+
+// How far into the enemy's top you must be for it to count as a stomp rather
+// than a side hit. Generous on purpose: a near miss reading as a death is the
+// most infuriating thing a platformer can do.
+inline constexpr float kStompGrace = 0.40f;
+
+inline constexpr int   kStartingLives    = 3;
+inline constexpr float kInvulnerableTime = 1.60f;  // after taking a hit
+inline constexpr float kHitKnockback     = 7.0f;
+inline constexpr float kHitKnockUp       = 7.5f;
+inline constexpr float kEnemySquashTime  = 0.32f;  // how long the squash shows
+
+inline constexpr glm::vec3 kEnemySize      {0.78f, 0.72f, 0.78f};
+inline constexpr glm::vec3 kWalkerBody     {0.682f, 0.286f, 0.447f}; // #AE4972
+inline constexpr glm::vec3 kWalkerFoot     {0.400f, 0.145f, 0.255f}; // #662541
+inline constexpr glm::vec3 kSpikerBody     {0.306f, 0.275f, 0.420f}; // #4E466B
+inline constexpr glm::vec3 kSpikerSpike    {0.878f, 0.906f, 0.937f}; // pale spikes
+
+// --- item blocks ------------------------------------------------------------
+// Solid from every side, but punching the underside pops a coin out. The used
+// block dims so you can see at a glance which are spent.
+inline constexpr glm::vec3 kItemBlockSize  {1.20f, 1.20f, 1.20f};
+inline constexpr glm::vec3 kItemBlockLive  {0.961f, 0.690f, 0.196f}; // #F5B032
+inline constexpr glm::vec3 kItemBlockTrim  {0.996f, 0.886f, 0.553f};
+inline constexpr glm::vec3 kItemBlockSpent {0.325f, 0.306f, 0.282f}; // #534E48
+inline constexpr float     kPoppedCoinTime = 0.70f;
+inline constexpr float     kPoppedCoinRise = 1.90f;
+
+// --- bounce pads ------------------------------------------------------------
+inline constexpr float     kBouncePadSpeed = 17.0f;  // reaches ~4.1 units up
+inline constexpr glm::vec3 kBouncePadColor {0.400f, 0.878f, 0.945f}; // #66E0F1
+inline constexpr float     kBouncePadSquash = 0.22f; // animation length
+
+inline constexpr float kCoinRadius   = 0.40f;  // how close counts as collected
+inline constexpr float kCoinSpinRate = 110.0f; // degrees per second
+inline constexpr float kGoalHoldTime = 1.40f;  // celebration before returning
+
+} // namespace plat
+
+//-----------------------------------------------------------------------------
+// FLOOR 2 - SHIFTING TUNNEL TUNING
+//
+// You auto-run down a square tunnel. Run off the edge of the surface you are
+// on and you transition onto the neighbouring wall, which becomes the new
+// floor - the world does not move, your sense of down rotates.
+//
+// The orientation is a DISCRETE state (which of the four faces is down), never
+// an integrated rotation. Only the camera's roll angle interpolates. Faking
+// this with forces and free rotation is the documented way to get drift, and
+// snapping to four known states cannot drift by construction.
+//-----------------------------------------------------------------------------
+namespace tunnel {
+
+inline constexpr float kTunnelSide    = 6.0f;   // the square cross-section
+inline constexpr int   kLanesPerFace  = 3;
+inline constexpr float kSegmentLength = 2.4f;   // depth of one row of tiles
+inline constexpr float kTileThickness = 0.45f;
+
+inline constexpr float laneWidth() { return kTunnelSide / static_cast<float>(kLanesPerFace); }
+inline constexpr float halfSide()  { return kTunnelSide * 0.5f; }
+
+// Auto-run. The speed creeps up so the level gets harder without new content.
+inline constexpr float kStartSpeed = 11.0f;
+inline constexpr float kMaxSpeed   = 16.5f;
+inline constexpr float kSpeedRamp  = 0.22f;   // units/sec gained per second
+
+// Strafing across the face you are on.
+inline constexpr float kStrafeSpeed = 9.0f;
+inline constexpr float kStrafeAccel = 70.0f;
+
+// Jump, derived the same way as the platformer: pick the height and the time
+// to reach it, and gravity follows.
+inline constexpr float kJumpHeight = 2.20f;
+inline constexpr float kTimeToApex = 0.30f;
+inline constexpr float gravity()   { return 2.0f * kJumpHeight / (kTimeToApex * kTimeToApex); }
+inline constexpr float jumpSpeed() { return 2.0f * kJumpHeight / kTimeToApex; }
+inline constexpr float kFallGravityMultiplier = 1.70f;
+inline constexpr float kCoyoteTime = 0.10f;
+
+// Falling this far past the surface means you missed, and the run restarts.
+inline constexpr float kFallLimit = 7.0f;
+
+// How fast the view rolls when you change face. Quick enough to keep up, slow
+// enough that you can see which way the world turned.
+inline constexpr float kRollSpeed = 420.0f;     // degrees per second
+
+// Camera sits behind and above, measured in the CURRENT face's frame so it
+// rolls with you.
+inline constexpr float kCameraBack   = 7.5f;
+inline constexpr float kCameraUp     = 2.6f;
+inline constexpr float kCameraAhead  = 6.0f;
+inline constexpr float kCameraFovDeg = 62.0f;
+
+// Colors. The tunnel is the dark floor of the tower, lit by its own edges.
+inline constexpr glm::vec3 kTileTopA   {0.541f, 0.333f, 0.776f}; // #8A55C6 violet
+inline constexpr glm::vec3 kTileTopB   {0.345f, 0.776f, 0.871f}; // #58C6DE cyan
+inline constexpr glm::vec3 kTileBody   {0.094f, 0.063f, 0.157f}; // #180F28
+inline constexpr glm::vec3 kVoidColor  {0.020f, 0.012f, 0.039f};
+inline constexpr glm::vec3 kGoalRing   {0.400f, 0.976f, 0.706f};
+
+// How many segments ahead are drawn. Beyond this the tunnel fades into dark.
+inline constexpr int kDrawDistance = 26;
+
+inline constexpr glm::vec3 kPlayerSize {0.80f, 1.30f, 0.80f};
+
+} // namespace tunnel
+
+//-----------------------------------------------------------------------------
 // ASSET PATHS  (unused for now - every object is a placeholder primitive)
 //
 // When real art is ready, load these in the scene that needs them. Paths are

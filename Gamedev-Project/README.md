@@ -5,7 +5,7 @@ Each floor is a level based on a different classic game, and the top floor is a
 boss fight against the rival school mascots.
 
 The game currently opens on the **title / level-select screen**: the tower
-itself is the menu. The four levels are placeholder scenes for now.
+itself is the menu. All four floors are now real, playable levels.
 
 ---
 
@@ -93,6 +93,8 @@ src/
     Shader.{h,cpp}             compile/link, cached uniform setters
     Mesh.{h,cpp}               VAO/VBO wrapper; box / pyramid / cylinder /
                                sphere / fullscreen quad primitives
+    Collision.h                AABB + per-axis movement, shared by the levels
+    MascotModels.{h,cpp}       the character shapes, shared by every scene
     Camera.{h,cpp}             look-at camera, plus worldToScreen()
     Input.{h,cpp}              per-frame keyboard + mouse, with edge detection
     TextRenderer.{h,cpp}       screen-space text and UI rectangles
@@ -100,7 +102,17 @@ src/
     Screenshot.{h,cpp}         saves the framebuffer to a PPM (dev tool)
   scenes/
     LevelSelectScene.{h,cpp}   the tower menu and title screen
-    PlaceholderLevelScene.{h,cpp}  stand-in for a real floor
+    PlatformerScene.{h,cpp}    FLOOR 1 - the 3D platformer
+    PlatformerLevel.h          >>> FLOOR 1 LAYOUT - EDIT THIS TO REDESIGN IT <<<
+    TunnelScene.{h,cpp}        FLOOR 2 - the gravity-shifting tunnel run
+    TunnelLevel.h              >>> FLOOR 2 LAYOUT - EDIT THIS TO REDESIGN IT <<<
+                               (floors 3 and 4 keep their layout in
+                               Config.h instead, in the kF3 / kF4 sections)
+    StealthScene.{h,cpp}       FLOOR 3 - sneak past the guard, open the door
+    BossScene.{h,cpp}          TOP FLOOR - the dodging fight (in progress)
+    Characters.{h,cpp}         Roary with walk animation, used by floors 3-4
+    PlaceholderLevelScene.{h,cpp}  no longer routed to; kept as the template
+                               to copy when a new screen is needed
 assets/                        empty for now; real models and textures go here
 ```
 
@@ -134,6 +146,86 @@ the obvious guess.
 
 Every one of those colors is a named constant in the mascot section of
 `Config.h`.
+
+### Floor 1 - Platform Peril
+
+A 3D platformer. Run and jump up a tower of platforms to the goal, collecting
+coins. WASD to move, Space to jump (hold for height, tap for a hop), R to
+respawn, Esc to leave, C to force-complete.
+
+**Changing the level** is `src/scenes/PlatformerLevel.h` and nothing else. It
+is three tables - static platforms, moving platforms, coins - plus the spawn
+and goal. Add a row and the thing appears.
+
+**Changing the feel** is `cfg::plat` in `Config.h`. Jump is described the way a
+designer thinks about it: `kJumpHeight` (how high) and `kTimeToApex` (how long
+to get there). Gravity and launch speed are *derived* from those, so a jump
+always reaches exactly the stated height - you never tune a gravity constant by
+trial and error.
+
+**Mechanics**
+
+| Thing | What it does |
+| --- | --- |
+| Walker | patrols a set range; land on it to squash it and bounce off |
+| Spiker | spiked on top, so stomping hurts - it has to be dodged |
+| Item block | solid, but punch the underside and a coin pops out |
+| Bounce pad | throws you ~4.1 units up, far past a normal 2.3 jump |
+| Lives | three; a side hit costs one, knocks you back and grants brief invulnerability |
+
+The level reads left to right - a ground run with pits and enemies, then a
+climb, then the summit. That shape is deliberate: the genre wants a journey
+across, not a ladder upward.
+
+Three details that matter more than they look:
+
+- **Coyote time** - you can still jump for ~0.12s after walking off an edge.
+- **Jump buffering** - a press up to ~0.12s before landing still fires.
+- **Jump cut** - releasing early while rising shortens the jump.
+
+Without these the controls feel broken even though they are technically
+correct. They are the difference between a platformer that reads as finished
+and one that reads as a prototype.
+
+**Moving platforms** follow the ordering from Maddy Thorson's Celeste /
+TowerFall write-up: work out who is riding *before* the platform moves, move
+all platforms before any actors, and carry riders by the exact platform
+movement with no collision check. Done in any other order you get jitter,
+sinking, or being flung off.
+
+### Floor 2 - The Shifting Tunnel
+
+You auto-run down a square tunnel. Run off the side of the surface you are on
+and you carry on across the neighbouring wall, which becomes your new floor -
+the world holds still and your sense of down rotates. A/D to strafe, Space to
+jump, R to restart. Miss a jump and the whole run starts over - the tunnel is
+short enough that a restart is a setback rather than a punishment.
+
+**Changing the level** is `src/scenes/TunnelLevel.h`. Each row is one segment
+of tunnel and lists which tiles exist on each of the four faces, three lanes
+each, as `#` and `.`:
+
+```
+{"..#", "###", "...", "..."}     // floor only on the right; wall available
+{"...", "###", "...", "..."}     // floor gone - you must be on the wall
+```
+
+Face 0 is the floor and face + 1 is always whichever face you reach by
+strafing RIGHT on screen, so the corners pair up as face 0 lane 2 to face 1
+lane 0, face 1 lane 2 to face 2 lane 0, and so on round the tube; so to push the player onto a wall you leave
+the adjacent lane solid and then delete the floor.
+
+**How the orientation is stored matters.** The player is on one of four faces,
+held as an integer 0-3, and gravity points at whichever that is. Only the
+camera's roll angle interpolates, purely for looks. The usual way to build
+this - applying forces and letting a free rotation integrate - is documented
+as drifting over time. Four discrete states cannot drift, by construction.
+
+**Is it beatable?** There is a solvability checker: it does a breadth-first
+search over every (segment, face, lane) the player could stand on, allowing a
+one-lane shift per segment, corner transitions, and a jump clearing about two
+segments. If it cannot reach the last segment, the level is impossible. Run it
+after editing the layout.
 
 ### Where to change how things look
 
