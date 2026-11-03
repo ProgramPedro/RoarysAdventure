@@ -85,6 +85,9 @@ bool StealthScene::init() {
     guardPos_        = cfg::kF3GuardStart;
     guardFacingDeg_  = cfg::kF3GuardFacing;
 
+    itemCollected_.fill(false);
+    playerSeen_ = false;
+
     return true;
 }
 
@@ -143,6 +146,38 @@ glm::vec3 StealthScene::clampToRoom(const glm::vec3& position, float radius) con
     return glm::vec3(std::clamp(position.x, -limitX, limitX),
                      position.y,
                      std::clamp(position.z, -limitZ, limitZ));
+}
+
+int StealthScene::collectedCount() const {
+    int count = 0;
+    for (const bool collected : itemCollected_) {
+        if (collected) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void StealthScene::collectNearbyItems() {
+    // Compared squared, so there is no square root per item per frame.
+    const float radiusSquared = cfg::kF3ItemPickupRadius * cfg::kF3ItemPickupRadius;
+
+    for (int i = 0; i < cfg::kF3ItemCount; ++i) {
+        if (itemCollected_[i]) {
+            continue;
+        }
+
+        const glm::vec3& item = cfg::kF3ItemPositions[i];
+        const float dx = item.x - playerPos_.x;
+        const float dz = item.z - playerPos_.z;
+
+        // Distance on the floor only. Roary's Y never changes, and the item
+        // hovers, so including Y would make the hover height part of the
+        // pickup range by accident.
+        if (dx * dx + dz * dz <= radiusSquared) {
+            itemCollected_[i] = true;
+        }
+    }
 }
 
 bool StealthScene::lineCrossesWall(const glm::vec3& from, const glm::vec3& to) {
@@ -317,8 +352,9 @@ void StealthScene::update(float deltaTime) {
     elapsedTime_ += deltaTime;
     movePlayer(deltaTime);
 
-    // After the move, so the cone and the HUD describe where Roary actually
+    // Both of these run after the move, so they describe where Roary actually
     // ended this frame rather than where he started it.
+    collectNearbyItems();
     playerSeen_ = guardCanSeePlayer();
 }
 
@@ -352,6 +388,7 @@ void StealthScene::render() {
     drawRoom();
     drawGuard();
     drawVisionCone();   // after the guard, so it lies over the deck
+    drawItems();
     drawRoary();
     drawUi();
 }
@@ -507,6 +544,69 @@ void StealthScene::drawVisionCone() {
     renderer.setDepthWrite(true);
 }
 
+void StealthScene::drawItems() {
+    Renderer& renderer = ctx().renderer;
+
+    const float k = cfg::kF3ItemScale;
+
+    for (int i = 0; i < cfg::kF3ItemCount; ++i) {
+        if (itemCollected_[i]) {
+            continue;
+        }
+
+        const glm::vec3& item = cfg::kF3ItemPositions[i];
+
+        // Offset each item's animation so a row of them does not pulse in
+        // lockstep, which reads as a repeating texture rather than as objects.
+        const float phase = static_cast<float>(i) * 0.7f;
+
+        const float bob = std::sin(elapsedTime_ * cfg::kF3ItemBobSpeed + phase)
+                        * cfg::kF3ItemBobAmount;
+        const float spinDeg = elapsedTime_ * cfg::kF3ItemSpinSpeed
+                            + phase * 57.0f;
+
+        const glm::vec3 center(item.x, cfg::kF3ItemHoverY + bob, item.z);
+        const glm::vec3 spin(0.0f, spinDeg, 0.0f);
+
+        // A faint halo on the deck underneath, to catch the eye from across the
+        // room. Kept weak and wide: at full strength it reads as a gold puddle
+        // and swallows the paw sitting on top of it.
+        renderer.setDepthWrite(false);
+        renderer.drawCylinderAt(glm::vec3(item.x, 0.02f, item.z),
+                                glm::vec3(1.70f, 0.02f, 1.70f),
+                                cfg::kF3ItemGlow, 0.10f, 1.0f);
+        renderer.setDepthWrite(true);
+
+        // The pad: a squashed sphere lying flat.
+        renderer.drawSphere(
+            makeTransform(center, glm::vec3(0.52f, 0.17f, 0.46f) * k, spin),
+            cfg::kF3ItemPaw, 1.0f, 0.35f);
+
+        // Four toes in an arc in front of the pad. Rotating each toe's offset
+        // by the same spin angle keeps the paw whole as it turns.
+        const float spinRad = glm::radians(spinDeg);
+        const float sinS = std::sin(spinRad);
+        const float cosS = std::cos(spinRad);
+
+        const float toeAngles[4] = {-42.0f, -15.0f, 15.0f, 42.0f};
+        for (const float toeAngle : toeAngles) {
+            const float a = glm::radians(toeAngle);
+
+            // Local space: +Z is the front of the paw.
+            const float lx = std::sin(a) * 0.34f * k;
+            const float lz = std::cos(a) * 0.34f * k;
+
+            const glm::vec3 toe(center.x + (lx * cosS + lz * sinS),
+                                center.y,
+                                center.z + (-lx * sinS + lz * cosS));
+
+            renderer.drawSphere(
+                makeTransform(toe, glm::vec3(0.17f, 0.12f, 0.17f) * k, spin),
+                cfg::kF3ItemPaw, 1.0f, 0.35f);
+        }
+    }
+}
+
 void StealthScene::drawRoary() {
     Renderer& renderer = ctx().renderer;
 
@@ -622,6 +722,18 @@ void StealthScene::drawUi() {
 
     text.drawCentered(info.description, centerX, px(80.0f),
                       px(cfg::kDescriptionScale), cfg::kTextDim);
+
+    // Paw counter, top right. Laid out the same way the level-select screen
+    // puts its "FLOORS CLEARED" counter, so the two screens match.
+    const std::string pawLabel = "PAWS " + std::to_string(collectedCount())
+                               + "/" + std::to_string(cfg::kF3ItemCount);
+    const bool allFound = (collectedCount() == cfg::kF3ItemCount);
+
+    text.draw(pawLabel,
+              static_cast<float>(width) - px(24.0f)
+                  - TextRenderer::measureWidth(pawLabel, px(cfg::kHintScale)),
+              px(24.0f), px(cfg::kHintScale),
+              allFound ? cfg::kTextComplete : cfg::kF3ItemPaw);
 
     // Being seen has no consequence yet - that is the suspicion meter and the
     // fail state, next step. For now it just says so plainly.

@@ -12,7 +12,7 @@
 //   [~] a guard, standing still - patrol routes still to come
 //   [~] a vision cone, and whether it can actually see Roary
 //   [ ] a suspicion meter, and failing the level when it fills
-//   [ ] key items to pick up
+//   [x] key items to pick up
 //   [ ] the locked door, which is the win condition
 //   [ ] throwable rocks that distract guards
 //
@@ -27,8 +27,10 @@
 // FLOOR 3 GAMEPLAY section of Config.h.
 //=============================================================================
 
+#include "core/Config.h"   // kF3ItemCount sizes the array below
 #include "core/Scene.h"
 
+#include <array>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
@@ -56,6 +58,12 @@ private:
     // Split out because the guards and the thrown rocks will want the same test.
     glm::vec3 clampToRoom(const glm::vec3& position, float radius) const;
 
+    // Collects any item Roary is standing close enough to.
+    void collectNearbyItems();
+
+    // How many paws he is carrying.
+    int collectedCount() const;
+
     // True when the guard can see Roary right now: in range, inside the cone's
     // half-angle, and with no wall between them.
     bool guardCanSeePlayer() const;
@@ -77,6 +85,7 @@ private:
     void drawRoary();
     void drawGuard();
     void drawVisionCone();
+    void drawItems();
     void drawUi();
 
     // Converts a design-pixel measurement into real framebuffer pixels, so the
@@ -107,6 +116,12 @@ private:
     // there is a second one and some behaviour worth grouping.
     glm::vec3 guardPos_{0.0f};
     float     guardFacingDeg_ = 0.0f;
+
+    // --- key items -----------------------------------------------------------
+    // One flag per entry in cfg::kF3ItemPositions. Parallel to that table
+    // rather than a copy of it, so the positions stay in Config.h where the
+    // rest of the level layout lives.
+    std::array<bool, cfg::kF3ItemCount> itemCollected_{};
 
     // Recomputed once per update and then read by the drawing code, so the
     // cone's colour and the HUD cannot disagree about what the guard sees.

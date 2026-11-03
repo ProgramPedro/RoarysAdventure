@@ -415,6 +415,43 @@ inline constexpr glm::vec3 kF3ConeCalm  {0.675f, 0.886f, 0.937f}; // #ACE2EF pal
 inline constexpr glm::vec3 kF3ConeAlert {0.961f, 0.345f, 0.286f}; // #F55849 alarm red
 inline constexpr float     kF3ConeAlpha = 0.20f;
 
+//-----------------------------------------------------------------------------
+// KEY ITEMS
+//
+// The things Roary has to collect before the exit door will open. Drawn as
+// paw prints for now. One sits in each of the four rooms, so finishing the
+// level means crossing the whole floor rather than slipping along one wall.
+//
+// They are picked up by walking near them - no key to press. A stealth level
+// already asks enough of the player's hands, and a pickup you can miss by
+// standing in the right place and not pressing anything is just annoying.
+//-----------------------------------------------------------------------------
+inline constexpr glm::vec3 kF3ItemPositions[] = {
+    { -12.5f, 0.0f, -7.0f },  // room A, far corner from the start
+    {  -1.5f, 0.0f,  7.0f },  // room B, past the guard
+    {  11.5f, 0.0f,  6.0f },  // room C
+    {  12.0f, 0.0f, -6.5f },  // room D
+};
+
+inline constexpr int kF3ItemCount =
+    static_cast<int>(sizeof(kF3ItemPositions) / sizeof(kF3ItemPositions[0]));
+
+// Generous on purpose: walking "onto" a thing the player can see should be
+// enough. Measured from the item's centre to Roary's.
+inline constexpr float kF3ItemPickupRadius = 1.10f;
+
+// Paw colours. FIU gold against the dark teal deck is the strongest contrast
+// in the palette, which is what a collectable wants.
+inline constexpr glm::vec3 kF3ItemPaw   = kFiuGold;
+inline constexpr glm::vec3 kF3ItemGlow  {0.980f, 0.843f, 0.420f};  // #FAD76B halo
+
+// Hovering and turning, so they read as "pick me up" rather than as scenery.
+inline constexpr float kF3ItemHoverY     = 0.80f;
+inline constexpr float kF3ItemBobAmount  = 0.14f;
+inline constexpr float kF3ItemBobSpeed   = 2.10f;
+inline constexpr float kF3ItemSpinSpeed  = 48.0f;  // degrees per second
+inline constexpr float kF3ItemScale      = 1.65f;
+
 // CAMERA: a fixed angled overhead view framing the whole room at once. For a
 // stealth level this beats a follow camera - the player has to see where every
 // guard is to plan a route, and a camera that chases Roary hides exactly the
