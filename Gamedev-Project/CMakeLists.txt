@@ -31,7 +31,6 @@ add_executable(roary
     src/scenes/PlatformerScene.cpp
     src/scenes/TunnelScene.cpp
     src/scenes/PlaceholderLevelScene.cpp
-    src/scenes/Characters.cpp
     src/scenes/BossScene.cpp
     src/scenes/StealthScene.cpp
 )

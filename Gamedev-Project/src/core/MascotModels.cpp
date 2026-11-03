@@ -1,5 +1,7 @@
 #include "core/MascotModels.h"
 
+#include <glm/common.hpp>   // glm::mix, glm::clamp for the tint
+
 #include "core/Config.h"
 #include "core/Renderer.h"
 
@@ -24,7 +26,8 @@ void drawEyePair(Renderer& renderer, const glm::vec3& center, float spacing,
 }
 
 void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
-               float height, float yawDegrees, float rollDegrees) {
+               float height, float yawDegrees, float rollDegrees,
+               float tint, const glm::vec3& tintColor) {
     // Everything below is written at Roary's natural size; this rescales it.
     const float k = height / kRoaryNaturalHeight;
 
@@ -54,9 +57,16 @@ void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
     // after Roary turned to face sideways.
     const glm::vec3 facing(0.0f, yawDegrees, rollDegrees);
 
-    const glm::vec3 fur   = cfg::kPantherFur;
-    const glm::vec3 cream = cfg::kPantherCream;
-    const glm::vec3 kit   = cfg::kFiuKit;
+    // Every colour goes through the tint, so one argument can wash the whole
+    // character without this function needing to know why. tint = 0 leaves
+    // the colours exactly as they were.
+    const auto shade = [&](const glm::vec3& c) {
+        return glm::mix(c, tintColor, glm::clamp(tint, 0.0f, 1.0f));
+    };
+
+    const glm::vec3 fur   = shade(cfg::kPantherFur);
+    const glm::vec3 cream = shade(cfg::kPantherCream);
+    const glm::vec3 kit   = shade(cfg::kFiuKit);
 
     // Legs and navy shorts.
     for (int side = 0; side < 2; ++side) {
@@ -72,7 +82,7 @@ void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
                                       size(0.54f, 0.50f, 0.46f), facing), kit);
     renderer.drawSphere(makeTransform(at(0.0f, 0.70f, 0.21f),
                                       size(0.24f, 0.11f, 0.05f), facing),
-                        cfg::kFiuKitTrim);
+                        shade(cfg::kFiuKitTrim));
 
     // Arms.
     for (int side = 0; side < 2; ++side) {
@@ -88,7 +98,7 @@ void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
                                       size(0.32f, 0.22f, 0.22f), facing), cream);
     renderer.drawSphere(makeTransform(at(0.0f, 1.03f, 0.30f),
                                       size(0.09f, 0.07f, 0.06f), facing),
-                        cfg::kPantherNose);
+                        shade(cfg::kPantherNose));
 
     // Ears, with a darker inner surface.
     for (int side = 0; side < 2; ++side) {
@@ -97,11 +107,122 @@ void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
                                           size(0.19f, 0.21f, 0.14f), facing), fur);
         renderer.drawSphere(makeTransform(at(x, 1.30f, 0.05f),
                                           size(0.10f, 0.12f, 0.08f), facing),
-                            cfg::kPantherInner);
+                            shade(cfg::kPantherInner));
     }
 
     drawEyePair(renderer, at(0.0f, 1.12f, 0.20f), 0.23f * k, 0.11f * k,
-                cfg::kEyeWhite, cfg::kEyeDark);
+                shade(cfg::kEyeWhite), shade(cfg::kEyeDark));
+}
+
+
+//-----------------------------------------------------------------------------
+// USF's Rocky. Grey, heavy, gold horns - and the widest of the three mascots,
+// which is why he is the one who charges.
+//
+// Lifted out of LevelSelectScene so the boss fight can draw him too. The only
+// thing added is `yawDegrees`: the menu always showed him face-on, but a boss
+// has to turn to face the direction he is about to charge in.
+//-----------------------------------------------------------------------------
+void drawBull(Renderer& renderer, const glm::vec3& feetPosition,
+              float height, float yawDegrees, float tint,
+              const glm::vec3& tintColor) {
+    // Written at the bull's natural height; this rescales every measurement
+    // below, so changing `height` keeps his proportions.
+    const float k = height / kBullNaturalHeight;
+
+    const float yaw = glm::radians(yawDegrees);
+    const float cosYaw = std::cos(yaw);
+    const float sinYaw = std::sin(yaw);
+
+    // A local offset (x right, y up, z forward) turned to face yawDegrees and
+    // moved out to his feet. Same helper drawRoary uses.
+    const auto at = [&](float x, float y, float z) {
+        const glm::vec3 local(x * k, y * k, z * k);
+        return feetPosition + glm::vec3(cosYaw * local.x + sinYaw * local.z,
+                                        local.y,
+                                        -sinYaw * local.x + cosYaw * local.z);
+    };
+    const auto size = [&](float x, float y, float z) {
+        return glm::vec3(x * k, y * k, z * k);
+    };
+
+    // Parts are TURNED as well as moved, or his snout would still point at +Z
+    // after he turned to charge sideways.
+    const glm::vec3 facing(0.0f, yawDegrees, 0.0f);
+
+    // Every colour passes through the tint, so one argument can flash him
+    // white when he is hit. tint = 0 leaves the colours untouched.
+    const auto shade = [&](const glm::vec3& c) {
+        return glm::mix(c, tintColor, glm::clamp(tint, 0.0f, 1.0f));
+    };
+
+    const glm::vec3 body   = shade(cfg::kBullBody);
+    const glm::vec3 muzzle = shade(cfg::kBullMuzzle);
+    const glm::vec3 horn   = shade(cfg::kBullHorn);
+
+    // Black boots, vegas gold pants.
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.13f : 0.13f);
+        renderer.drawSphere(makeTransform(at(x, 0.05f, 0.03f),
+                                          size(0.17f, 0.10f, 0.24f), facing),
+                            shade(cfg::kBullHoof));
+    }
+    renderer.drawSphere(makeTransform(at(0.0f, 0.22f, 0.0f),
+                                      size(0.44f, 0.30f, 0.38f), facing),
+                        shade(cfg::kBullPants));
+
+    // Heavy green-jerseyed chest - he is the widest of the three.
+    renderer.drawSphere(makeTransform(at(0.0f, 0.54f, 0.0f),
+                                      size(0.60f, 0.48f, 0.44f), facing),
+                        shade(cfg::kBullJersey));
+    renderer.drawSphere(makeTransform(at(0.0f, 0.58f, 0.21f),
+                                      size(0.11f, 0.12f, 0.04f), facing),
+                        shade(cfg::kFiuKitTrim));
+
+    // Grey arms.
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.33f : 0.33f);
+        renderer.drawSphere(makeTransform(at(x, 0.52f, 0.0f),
+                                          size(0.16f, 0.34f, 0.16f), facing),
+                            body);
+    }
+
+    // Head and snout. Everything from here is positioned relative to the head,
+    // so the offsets read the same way they did before the extraction.
+    const float headY = 0.92f;
+    renderer.drawSphere(makeTransform(at(0.0f, headY, 0.0f),
+                                      size(0.44f, 0.40f, 0.42f), facing),
+                        body);
+    renderer.drawSphere(makeTransform(at(0.0f, headY - 0.07f, 0.26f),
+                                      size(0.30f, 0.22f, 0.22f), facing),
+                        muzzle);
+
+    // Eyes.
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.07f : 0.07f);
+        renderer.drawSphere(makeTransform(at(x, headY - 0.09f, 0.29f),
+                                          size(0.06f, 0.05f, 0.04f), facing),
+                            shade(cfg::kEyeDark));
+    }
+
+    // The gold horns. Three shrinking spheres per side trace a curve that
+    // sweeps out and then up, which is what makes them read as bull horns
+    // rather than spikes.
+    for (int side = 0; side < 2; ++side) {
+        const float sign = (side == 0 ? -1.0f : 1.0f);
+
+        renderer.drawSphere(makeTransform(at(sign * 0.20f, headY + 0.14f, 0.0f),
+                                          size(0.16f, 0.15f, 0.15f), facing), horn);
+        renderer.drawSphere(makeTransform(at(sign * 0.31f, headY + 0.26f, 0.0f),
+                                          size(0.12f, 0.13f, 0.12f), facing), horn);
+        renderer.drawSphere(makeTransform(at(sign * 0.34f, headY + 0.38f, 0.0f),
+                                          size(0.08f, 0.10f, 0.08f), facing), horn);
+    }
+
+    // A heavy brow for the permanent scowl.
+    renderer.drawSphere(makeTransform(at(0.0f, headY + 0.09f, 0.21f),
+                                      size(0.34f, 0.07f, 0.08f), facing),
+                        muzzle);
 }
 
 } // namespace mascots

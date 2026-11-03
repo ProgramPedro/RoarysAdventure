@@ -348,8 +348,6 @@ inline constexpr float kF3PlayerScale  = 1.55f;  // multiplies his natural 1.42 
 inline constexpr float kF3WalkSpeed    = 5.20f;  // world units per second
 inline constexpr float kF3SneakSpeed   = 2.30f;  // while Shift is held
 inline constexpr float kF3TurnSpeed    = 11.0f;  // how fast he swings to face his heading
-inline constexpr float kF3BobSpeed     = 11.0f;  // the walk bounce
-inline constexpr float kF3BobAmount    = 0.055f;
 
 // Where he starts: the near-left corner, diagonally opposite the far wall the
 // exit door will eventually sit in.
@@ -670,7 +668,6 @@ inline constexpr float kF4PlayerRadius = 0.42f;
 inline constexpr float kF4PlayerScale  = 1.55f;
 inline constexpr float kF4WalkSpeed    = 5.80f;
 inline constexpr float kF4TurnSpeed    = 13.0f;
-inline constexpr float kF4BobSpeed     = 11.0f;
 inline constexpr glm::vec3 kF4StartPos {0.0f, 0.0f, 6.0f};  // near the front rim
 
 //-----------------------------------------------------------------------------
@@ -691,10 +688,6 @@ inline constexpr float kF4DashSpeed    = 22.0f;
 inline constexpr float kF4DashDuration = 0.22f;
 inline constexpr float kF4DashCooldown = 5.00f;
 
-// Ghost images left behind during the dash, so the movement reads as a dash
-// and not as a one-frame teleport.
-inline constexpr int   kF4DashTrailCount = 4;
-inline constexpr float kF4DashTrailAlpha = 0.30f;
 
 // While invincible he is washed toward this colour, which is the only signal
 // the player gets that the i-frames are actually active.
@@ -718,6 +711,64 @@ inline constexpr glm::vec3 kF4HeartEmpty {0.290f, 0.180f, 0.216f};
 inline constexpr float     kF4DashPipWidth = 120.0f;  // design pixels
 inline constexpr glm::vec3 kF4DashReady    {0.420f, 0.918f, 0.784f}; // mint
 inline constexpr glm::vec3 kF4DashCharging {0.400f, 0.290f, 0.333f};
+
+//-----------------------------------------------------------------------------
+// ROCKY THE BULL  -  the first boss
+//
+// His whole fight is one attack on a loop:
+//
+//   WAITING    he squares up to Roary, tracking him slowly
+//   TELEGRAPH  he locks his aim and paws the ground. A lane appears on the
+//              deck showing exactly where he is about to go. THIS is the
+//              window the player reads - the charge itself is too fast.
+//   CHARGING   straight down the locked lane, fast. Touching Roary costs a
+//              heart; he does not steer, so stepping aside beats it.
+//   STUNNED    he misses and hits the parapet. Wide open - touch him now and
+//              he takes a hit. This is the only way to damage him.
+//   RECOVER    he shakes it off and squares up again.
+//
+// The tuning rule behind the numbers: the telegraph has to be long enough to
+// walk out of the lane WITHOUT dashing, because the dash is only available
+// about one charge in two. See the note on kF4DashCooldown.
+//-----------------------------------------------------------------------------
+inline constexpr int   kF4RockyHealth     = 3;     // hits to beat him
+inline constexpr float kF4RockyRadius     = 0.75f; // body radius, for contact
+inline constexpr float kF4RockyHeight     = 2.30f; // taller than Roary
+inline constexpr float kF4RockyWalkSpeed  = 1.60f; // shuffling while he waits
+inline constexpr float kF4RockyTurnRate   = 2.60f; // slow - he is readable
+
+inline constexpr float kF4RockyWaitTime      = 1.10f;
+inline constexpr float kF4RockyTelegraphTime = 1.05f;  // time to step aside
+inline constexpr float kF4RockyChargeSpeed   = 17.0f;
+inline constexpr float kF4RockyStunTime      = 3.20f;  // the punish window
+inline constexpr float kF4RockyRecoverTime   = 0.80f;
+
+// How close Roary has to get to land a hit while Rocky is stunned. Generous:
+// the player has a few seconds and a long way to run, so the last thing the
+// fight needs is a fiddly contact test at the end of it.
+inline constexpr float kF4RockyPunishRange = 1.70f;
+
+// After taking a hit, Roary flashes and cannot be hit again for a moment -
+// otherwise a single charge would cost two hearts as the bull slid past.
+inline constexpr float kF4PlayerHitInvuln = 1.30f;
+
+// The charge lane drawn during the telegraph. Slightly wider than Rocky so
+// that standing on the edge of the drawn lane really is dangerous.
+inline constexpr float     kF4LaneWidth    = 2.00f;
+inline constexpr glm::vec3 kF4LaneColor    {0.961f, 0.345f, 0.286f};
+inline constexpr float     kF4LaneAlpha    = 0.26f;
+
+// Tints: white while he is reeling from a hit, red while he is stunned.
+inline constexpr glm::vec3 kF4RockyHurtTint {1.000f, 1.000f, 1.000f};
+inline constexpr glm::vec3 kF4RockyStunTint {0.961f, 0.549f, 0.286f};
+
+inline constexpr glm::vec3 kF4BossBarFill  {0.839f, 0.247f, 0.306f};
+inline constexpr glm::vec3 kF4BossBarTrack {0.290f, 0.129f, 0.173f};
+inline constexpr float     kF4BossBarWidth = 300.0f;  // design pixels
+
+// How long the win and lose messages stay up before the level reacts.
+inline constexpr float kF4VictoryTime = 2.60f;
+inline constexpr float kF4DefeatTime  = 2.20f;
 
 //-----------------------------------------------------------------------------
 // CAMERA  (solved the same way floor 3's was - see kF3DesignAspect)

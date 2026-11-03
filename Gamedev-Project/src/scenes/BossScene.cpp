@@ -18,7 +18,8 @@
 
 #include "scenes/BossScene.h"
 
-#include "scenes/Characters.h"   // drawRoary() and shortestAngleDelta()
+#include "core/Angles.h"        // shortestAngleDelta()
+#include "core/MascotModels.h"  // mascots::drawRoary()
 
 #include "core/Camera.h"
 #include "core/GameProgress.h"
@@ -69,16 +70,21 @@ bool BossScene::init() {
     // 180 degrees looks down -Z, which is AWAY from the camera and into the
     // middle of the arena where the mascots will be. 0 would face the camera.
     facingDeg_   = 180.0f;
-    walkCycle_   = 0.0f;
 
     dashTimer_      = 0.0f;
     dashCooldown_   = 0.0f;
     dashDir_        = glm::vec2(0.0f, 1.0f);
-    dashTrailCount_ = 0;
-    dashTrailTimer_ = 0.0f;
-
     hearts_      = cfg::kF4MaxHearts;
     elapsedTime_ = 0.0f;
+
+    rockyHealth_  = cfg::kF4RockyHealth;
+    rockyPos_     = glm::vec3(0.0f, 0.0f, -4.0f);   // waiting across the arena
+    rockyFacingDeg_ = 0.0f;
+    setRockyState(RockyState::Waiting, cfg::kF4RockyWaitTime);
+
+    playerInvulnTimer_ = 0.0f;
+    outcomeTimer_      = 0.0f;
+    victory_           = false;
     return true;
 }
 
@@ -148,10 +154,6 @@ void BossScene::startDash() {
     dashTimer_    = cfg::kF4DashDuration;
     dashCooldown_ = cfg::kF4DashCooldown;
 
-    // Start the trail empty so ghosts from an earlier dash do not appear
-    // strung out behind this one.
-    dashTrailCount_ = 0;
-    dashTrailTimer_ = 0.0f;
 }
 
 void BossScene::updateDash(float deltaTime) {
@@ -159,29 +161,8 @@ void BossScene::updateDash(float deltaTime) {
         dashCooldown_ = std::max(0.0f, dashCooldown_ - deltaTime);
     }
 
-    if (dashTimer_ <= 0.0f) {
-        return;
-    }
-
-    dashTimer_ = std::max(0.0f, dashTimer_ - deltaTime);
-
-    // Drop a ghost every so often rather than every frame, or the trail is a
-    // solid smear at 60fps and a dotted line at 20.
-    dashTrailTimer_ -= deltaTime;
-
-    if (dashTrailTimer_ <= 0.0f) {
-        dashTrailTimer_ = cfg::kF4DashDuration
-                        / static_cast<float>(cfg::kF4DashTrailCount);
-
-        // Shuffle everything one slot older, then write the newest at the
-        // front. With four entries this is cheaper than any clever structure.
-        for (int i = cfg::kF4DashTrailCount - 1; i > 0; --i) {
-            dashTrail_[static_cast<std::size_t>(i)] =
-                dashTrail_[static_cast<std::size_t>(i - 1)];
-        }
-
-        dashTrail_[0] = playerPos_;
-        dashTrailCount_ = std::min(dashTrailCount_ + 1, cfg::kF4DashTrailCount);
+    if (dashTimer_ > 0.0f) {
+        dashTimer_ = std::max(0.0f, dashTimer_ - deltaTime);
     }
 }
 
@@ -227,7 +208,6 @@ void BossScene::movePlayer(float deltaTime) {
         playerPos_ = clampToArena(playerPos_, cfg::kF4PlayerRadius);
 
         facingDeg_ = glm::degrees(std::atan2(dashDir_.x, dashDir_.y));
-        walkCycle_ += cfg::kF4BobSpeed * deltaTime;
         return;
     }
 
@@ -245,16 +225,216 @@ void BossScene::movePlayer(float deltaTime) {
     const float turn = std::min(cfg::kF4TurnSpeed * deltaTime, 1.0f);
     facingDeg_ += shortestAngleDelta(facingDeg_, targetDeg) * turn;
 
-    walkCycle_ += cfg::kF4BobSpeed * deltaTime;
+}
+
+//=============================================================================
+// Rocky the bull
+//=============================================================================
+
+void BossScene::setRockyState(RockyState state, float duration) {
+    rockyState_ = state;
+    rockyTimer_ = duration;
+}
+
+void BossScene::updateRocky(float deltaTime) {
+    if (rockyState_ == RockyState::Beaten) {
+        return;
+    }
+
+    rockyTimer_ = std::max(0.0f, rockyTimer_ - deltaTime);
+
+    // Where Roary is, relative to Rocky. Used by most states below.
+    const float toPlayerX = playerPos_.x - rockyPos_.x;
+    const float toPlayerZ = playerPos_.z - rockyPos_.z;
+    const float toPlayerDeg = glm::degrees(std::atan2(toPlayerX, toPlayerZ));
+
+    switch (rockyState_) {
+    case RockyState::Waiting: {
+        // Square up, slowly. The slow turn is deliberate: it lets the player
+        // circle him, and it means his facing at the end of the telegraph is
+        // something they could have predicted.
+        const float turn = std::min(cfg::kF4RockyTurnRate * deltaTime, 1.0f);
+        rockyFacingDeg_ += shortestAngleDelta(rockyFacingDeg_, toPlayerDeg) * turn;
+
+        // Shuffle toward Roary so he cannot be stalled out at the far rim.
+        const float distance = std::sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
+        if (distance > 4.0f) {
+            rockyPos_.x += (toPlayerX / distance) * cfg::kF4RockyWalkSpeed * deltaTime;
+            rockyPos_.z += (toPlayerZ / distance) * cfg::kF4RockyWalkSpeed * deltaTime;
+            rockyPos_ = clampToArena(rockyPos_, cfg::kF4RockyRadius);
+        }
+
+        if (rockyTimer_ <= 0.0f) {
+            setRockyState(RockyState::Telegraph, cfg::kF4RockyTelegraphTime);
+        }
+        break;
+    }
+
+    case RockyState::Telegraph: {
+        // Keep tracking, but far more slowly, so the lane drifts only a little
+        // once it is up. Locking it completely at the START would let the
+        // player walk out before the lane even appeared.
+        const float turn = std::min(cfg::kF4RockyTurnRate * 0.35f * deltaTime, 1.0f);
+        rockyFacingDeg_ += shortestAngleDelta(rockyFacingDeg_, toPlayerDeg) * turn;
+
+        if (rockyTimer_ <= 0.0f) {
+            // Commit. From here he cannot steer, which is the whole reason
+            // stepping aside works.
+            const float facingRad = glm::radians(rockyFacingDeg_);
+            chargeDir_ = glm::vec2(std::sin(facingRad), std::cos(facingRad));
+            setRockyState(RockyState::Charging, 0.0f);
+        }
+        break;
+    }
+
+    case RockyState::Charging: {
+        rockyPos_.x += chargeDir_.x * cfg::kF4RockyChargeSpeed * deltaTime;
+        rockyPos_.z += chargeDir_.y * cfg::kF4RockyChargeSpeed * deltaTime;
+
+        checkChargeContact();
+
+        // Did he run out of arena? The clamp tells us: if it moved him, he was
+        // trying to leave, which means he just met the parapet.
+        const glm::vec3 clamped = clampToArena(rockyPos_, cfg::kF4RockyRadius);
+        const bool hitTheWall = (clamped.x != rockyPos_.x || clamped.z != rockyPos_.z);
+        rockyPos_ = clamped;
+
+        if (hitTheWall) {
+            setRockyState(RockyState::Stunned, cfg::kF4RockyStunTime);
+        }
+        break;
+    }
+
+    case RockyState::Stunned:
+        // Wide open. tryPunish() is what ends this early.
+        if (rockyTimer_ <= 0.0f) {
+            setRockyState(RockyState::Recover, cfg::kF4RockyRecoverTime);
+        }
+        break;
+
+    case RockyState::Recover:
+        if (rockyTimer_ <= 0.0f) {
+            setRockyState(RockyState::Waiting, cfg::kF4RockyWaitTime);
+        }
+        break;
+
+    case RockyState::Beaten:
+        break;
+    }
+}
+
+void BossScene::checkChargeContact() {
+    if (isInvulnerable()) {
+        return;
+    }
+
+    const float dx = playerPos_.x - rockyPos_.x;
+    const float dz = playerPos_.z - rockyPos_.z;
+    const float reach = cfg::kF4RockyRadius + cfg::kF4PlayerRadius;
+
+    if (dx * dx + dz * dz <= reach * reach) {
+        takeHit();
+    }
+}
+
+void BossScene::tryPunish() {
+    // Only while he is reeling against the parapet. At any other moment
+    // touching him does nothing - he is a wall, not a target.
+    if (rockyState_ != RockyState::Stunned) {
+        return;
+    }
+
+    const float dx = playerPos_.x - rockyPos_.x;
+    const float dz = playerPos_.z - rockyPos_.z;
+    const float reach = cfg::kF4RockyPunishRange + cfg::kF4PlayerRadius;
+
+    if (dx * dx + dz * dz > reach * reach) {
+        return;
+    }
+
+    rockyHealth_ = std::max(0, rockyHealth_ - 1);
+
+    if (rockyHealth_ <= 0) {
+        setRockyState(RockyState::Beaten, 0.0f);
+        victory_      = true;
+        outcomeTimer_ = cfg::kF4VictoryTime;
+    } else {
+        // Knocked back into his recovery, so one stun cannot be milked for
+        // several hits in a row.
+        setRockyState(RockyState::Recover, cfg::kF4RockyRecoverTime);
+    }
+}
+
+void BossScene::takeHit() {
+    hearts_ = std::max(0, hearts_ - 1);
+    playerInvulnTimer_ = cfg::kF4PlayerHitInvuln;
+
+    if (hearts_ <= 0) {
+        victory_      = false;
+        outcomeTimer_ = cfg::kF4DefeatTime;
+    }
+}
+
+void BossScene::resetFight() {
+    playerPos_ = clampToArena(cfg::kF4StartPos, cfg::kF4PlayerRadius);
+    moveDir_   = glm::vec2(0.0f);
+    facingDeg_ = 180.0f;
+
+    dashTimer_    = 0.0f;
+    dashCooldown_ = 0.0f;
+
+    hearts_ = cfg::kF4MaxHearts;
+    playerInvulnTimer_ = 0.0f;
+
+    // Rocky goes back to full health too. The fight is short, so restarting it
+    // whole is kinder than it sounds - and a boss who stays damaged after
+    // beating you makes the loss meaningless.
+    rockyHealth_    = cfg::kF4RockyHealth;
+    rockyPos_       = glm::vec3(0.0f, 0.0f, -4.0f);
+    rockyFacingDeg_ = 0.0f;
+    setRockyState(RockyState::Waiting, cfg::kF4RockyWaitTime);
+
+    outcomeTimer_ = 0.0f;
+    victory_      = false;
 }
 
 void BossScene::update(float deltaTime) {
     elapsedTime_ += deltaTime;
 
-    // Dash timers first, so movePlayer() sees this frame's dash state rather
-    // than the previous frame's.
+    // A win or a loss banner is up: the fight is frozen while it reads, then
+    // the level reacts. Returning early is what freezes it.
+    if (outcomeTimer_ > 0.0f) {
+        outcomeTimer_ = std::max(0.0f, outcomeTimer_ - deltaTime);
+
+        if (outcomeTimer_ <= 0.0f) {
+            if (victory_) {
+                // The real win condition at last: floor 4 complete.
+                ctx().progress.markCompleted(kFloorIndex);
+                returnToMenu();
+            } else {
+                resetFight();
+            }
+        }
+        return;
+    }
+
+    if (playerInvulnTimer_ > 0.0f) {
+        playerInvulnTimer_ = std::max(0.0f, playerInvulnTimer_ - deltaTime);
+    }
+
+    // 1. Dash timers first, so movePlayer() sees this frame's dash state
+    //    rather than the previous frame's.
     updateDash(deltaTime);
+
+    // 2. Move Roary. Everything below wants his final position this frame.
     movePlayer(deltaTime);
+
+    // 3. Rocky acts, which includes checking whether his charge caught Roary.
+    updateRocky(deltaTime);
+
+    // 4. And last, whether Roary reached him while he is down. After Rocky
+    //    moves, or a punish could land on a bull who has already got up.
+    tryPunish();
 }
 
 //=============================================================================
@@ -284,6 +464,8 @@ void BossScene::render() {
     renderer.setCamera(camera.view(), camera.perspective(width, height));
 
     drawArena();
+    drawChargeLane();   // on the deck, so under everything standing on it
+    drawRocky();
     drawPlayer();
     drawUi();
 }
@@ -354,37 +536,115 @@ void BossScene::drawArena() {
     }
 }
 
+void BossScene::drawChargeLane() {
+    // Only while he is winding up. Once he is moving, the bull himself is the
+    // warning and a lane on the floor just adds clutter.
+    if (rockyState_ != RockyState::Telegraph) {
+        return;
+    }
+
+    Renderer& renderer = ctx().renderer;
+
+    const float facingRad = glm::radians(rockyFacingDeg_);
+    const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
+
+    // How far he will actually travel: from where he stands to the point where
+    // the parapet stops him. That is a ray meeting a circle, and because he
+    // starts INSIDE the circle there is exactly one answer in front of him.
+    //
+    // A point on his path is  P + D*t.  We want the t where it is exactly
+    // `limit` from the middle of the arena, so solve |P + D*t| = limit:
+    //
+    //     (P + D*t) . (P + D*t) = limit^2
+    //     t^2 + 2(P.D)t + (P.P - limit^2) = 0        (D is a unit vector)
+    //
+    // which is the quadratic formula with a = 1. Taking the + root gives the
+    // crossing ahead of him rather than the one behind.
+    const float limit = cfg::kF4ArenaRadius - cfg::kF4RockyRadius;
+    const float pDotD = rockyPos_.x * forward.x + rockyPos_.z * forward.z;
+    const float pDotP = rockyPos_.x * rockyPos_.x + rockyPos_.z * rockyPos_.z;
+
+    const float discriminant = pDotD * pDotD - (pDotP - limit * limit);
+    const float length = std::max(0.5f,
+        -pDotD + std::sqrt(std::max(0.0f, discriminant)));
+
+    const glm::vec3 centre = rockyPos_ + forward * (length * 0.5f);
+
+    // How far through the wind-up he is, so the lane brightens as the moment
+    // approaches. This is the one piece of timing the player reads, so it is
+    // worth making it legible.
+    const float progress = (cfg::kF4RockyTelegraphTime > 0.0f)
+        ? 1.0f - (rockyTimer_ / cfg::kF4RockyTelegraphTime)
+        : 1.0f;
+
+    renderer.setDepthWrite(false);
+    renderer.drawBox(
+        makeTransform(glm::vec3(centre.x, 0.03f, centre.z),
+                      glm::vec3(cfg::kF4LaneWidth, 0.02f, length),
+                      glm::vec3(0.0f, rockyFacingDeg_, 0.0f)),
+        cfg::kF4LaneColor,
+        cfg::kF4LaneAlpha * (0.45f + progress * 0.55f),
+        1.0f);
+    renderer.setDepthWrite(true);
+}
+
+void BossScene::drawRocky() {
+    Renderer& renderer = ctx().renderer;
+
+    if (rockyState_ == RockyState::Beaten) {
+        return;   // he is down; nothing left to draw
+    }
+
+    // Blob shadow, same as Roary gets, scaled to how much bigger he is.
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(rockyPos_.x, 0.015f, rockyPos_.z),
+                            glm::vec3(cfg::kF4RockyRadius * 2.4f, 0.02f,
+                                      cfg::kF4RockyRadius * 2.4f),
+                            cfg::kF3ShadowColor, cfg::kF3ShadowAlpha, 1.0f);
+    renderer.setDepthWrite(true);
+
+    // The tint is his state readout, and it is the only one he has: orange
+    // while he is reeling and open to a hit, white for the brief recovery
+    // after he takes one, plain grey the rest of the time. No animation.
+    float tint = 0.0f;
+    glm::vec3 tintColor(1.0f);
+
+    if (rockyState_ == RockyState::Stunned) {
+        tint = 0.55f;
+        tintColor = cfg::kF4RockyStunTint;
+    } else if (rockyState_ == RockyState::Recover) {
+        tint = 0.40f;
+        tintColor = cfg::kF4RockyHurtTint;
+    }
+
+    mascots::drawBull(renderer, rockyPos_, cfg::kF4RockyHeight,
+                      rockyFacingDeg_, tint, tintColor);
+}
+
 void BossScene::drawPlayer() {
     Renderer& renderer = ctx().renderer;
 
-    // --- the dash trail ------------------------------------------------------
-    // Ghost copies of Roary at the positions he passed through, oldest faintest.
-    // Drawn before him so he is always on top of his own afterimages.
+    // Blob shadow, so he is not floating over the deck.
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(playerPos_.x, 0.015f, playerPos_.z),
+                            glm::vec3(cfg::kF4PlayerRadius * 2.3f, 0.02f,
+                                      cfg::kF4PlayerRadius * 2.3f),
+                            cfg::kF3ShadowColor, cfg::kF3ShadowAlpha, 1.0f);
+    renderer.setDepthWrite(true);
+
+    // The shared model from core/MascotModels.cpp, the same one floors 1 and 2
+    // use. A static pose - no walk animation, and no ghost trail behind a
+    // dash. Those are deliberately on hold.
     //
-    // There is no alpha on drawRoary(), so the "fade" is done by washing each
-    // ghost further toward the arena's background colour - older ghosts blend
-    // in more, which reads the same way at this distance.
-    if (dashTimer_ > 0.0f) {
-        for (int i = 0; i < dashTrailCount_; ++i) {
-            const float age = static_cast<float>(i + 1)
-                            / static_cast<float>(cfg::kF4DashTrailCount + 1);
-
-            ::drawRoary(renderer, dashTrail_[static_cast<std::size_t>(i)],
-                        facingDeg_, walkCycle_, false,
-                        cfg::kF4PlayerScale * (1.0f - age * 0.25f),
-                        0.55f + age * 0.35f, cfg::kF4DeckB);
-        }
-    }
-
-    // --- Roary himself -------------------------------------------------------
-    // Washed pale blue while the invincibility frames are up. That tint is the
-    // ONLY thing telling the player the dash is currently protecting them, so
-    // it needs to be unmistakable.
+    // The ONE thing still varying is the tint: he washes pale blue while the
+    // dash's invincibility frames are up. That is not decoration, it is the
+    // only way the player can tell the dash is currently protecting them, so
+    // it stays even with the animation stripped out.
     const float tint = isInvulnerable() ? cfg::kF4InvulnTintMix : 0.0f;
 
-    ::drawRoary(renderer, playerPos_, facingDeg_, walkCycle_,
-                moveDir_ != glm::vec2(0.0f) || dashTimer_ > 0.0f,
-                cfg::kF4PlayerScale, tint, cfg::kF4InvulnTint);
+    ::mascots::drawRoary(renderer, playerPos_,
+                         mascots::kRoaryNaturalHeight * cfg::kF4PlayerScale,
+                         facingDeg_, 0.0f, tint, cfg::kF4InvulnTint);
 }
 
 float BossScene::px(float designPixels) const {
@@ -446,10 +706,72 @@ void BossScene::drawUi() {
               px(cfg::kHintScale),
               ready ? cfg::kF4DashReady : cfg::kTextDim);
 
+    // --- Rocky's health, top centre ------------------------------------------
+    // Under the title, where a boss bar belongs. Drawn as one bar split into
+    // segments so a hit is a visible chunk disappearing rather than a slow
+    // slide - with only three hits, each one should feel like an event.
+    if (rockyState_ != RockyState::Beaten) {
+        const float barWidth  = px(cfg::kF4BossBarWidth);
+        const float barHeight = px(14.0f);
+        const float barX      = centerX - barWidth * 0.5f;
+        const float barY      = px(112.0f);
+
+        text.fillRect(barX - px(3.0f), barY - px(3.0f),
+                      barWidth + px(6.0f), barHeight + px(6.0f),
+                      cfg::kF4BossBarTrack, 0.85f);
+
+        const float gap = px(4.0f);
+        const float segment =
+            (barWidth - gap * static_cast<float>(cfg::kF4RockyHealth - 1))
+            / static_cast<float>(cfg::kF4RockyHealth);
+
+        for (int i = 0; i < cfg::kF4RockyHealth; ++i) {
+            if (i >= rockyHealth_) {
+                continue;
+            }
+            text.fillRect(barX + static_cast<float>(i) * (segment + gap), barY,
+                          segment, barHeight, cfg::kF4BossBarFill, 0.95f);
+        }
+
+        text.drawCentered("ROCKY", centerX, barY + barHeight + px(6.0f),
+                          px(cfg::kHintScale), cfg::kBullHorn);
+    }
+
+    // --- what Rocky is doing, so the player can learn the pattern ------------
+    const char* rockyLabel = nullptr;
+    glm::vec3 rockyLabelColor = cfg::kTextDim;
+
+    if (rockyState_ == RockyState::Telegraph) {
+        rockyLabel = "HE IS GOING TO CHARGE - GET OUT OF THE LANE";
+        rockyLabelColor = cfg::kF4LaneColor;
+    } else if (rockyState_ == RockyState::Stunned) {
+        rockyLabel = "HE IS DOWN - TOUCH HIM NOW";
+        rockyLabelColor = cfg::kF4DashReady;
+    }
+
+    if (rockyLabel != nullptr && outcomeTimer_ <= 0.0f) {
+        text.drawCentered(rockyLabel, centerX, bottom - px(160.0f),
+                          px(cfg::kHintScale), rockyLabelColor);
+    }
+
+    // --- win / lose banner ---------------------------------------------------
+    if (outcomeTimer_ > 0.0f) {
+        const std::string banner = victory_ ? "ROCKY IS DOWN!"
+                                            : "KNOCKED OUT - TRY AGAIN";
+        const float scale = px(cfg::kFloorNameScale * 0.85f);
+        const float textWidth = TextRenderer::measureWidth(banner, scale);
+        const float bannerY = static_cast<float>(height) * 0.42f;
+
+        text.fillRect(centerX - textWidth * 0.5f - px(18.0f), bannerY - px(12.0f),
+                      textWidth + px(36.0f),
+                      TextRenderer::measureHeight(scale) + px(24.0f),
+                      cfg::kBgBottom, 0.82f);
+
+        text.drawCentered(banner, centerX, bannerY, scale,
+                          victory_ ? cfg::kTextComplete : cfg::kF4HeartFull);
+    }
+
     // --- the usual hints -----------------------------------------------------
-    text.drawCentered("NO BOSSES YET - ARENA AND DASH ONLY",
-                      centerX, bottom - px(126.0f),
-                      px(cfg::kHintScale), cfg::kFiuGold);
 
     text.drawCentered("WASD - MOVE     SPACE - DASH",
                       centerX, bottom - px(90.0f),

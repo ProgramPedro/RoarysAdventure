@@ -71,7 +71,8 @@
 
 #include "scenes/StealthScene.h"
 
-#include "scenes/Characters.h"   // drawRoary() and shortestAngleDelta()
+#include "core/Angles.h"        // shortestAngleDelta()
+#include "core/MascotModels.h"  // mascots::drawRoary()
 
 #include "core/Camera.h"
 #include "core/Config.h"
@@ -168,7 +169,6 @@ bool StealthScene::init() {
     // 180 degrees looks down -Z: away from the camera and into the room, which
     // is the direction he has to travel. (0 would face back at the camera.)
     facingDeg_   = 180.0f;
-    walkCycle_   = 0.0f;
     sneaking_    = false;
     elapsedTime_ = 0.0f;
 
@@ -895,10 +895,6 @@ void StealthScene::movePlayer(float deltaTime) {
         const float turn = std::min(cfg::kF3TurnSpeed * deltaTime, 1.0f);
         facingDeg_ += shortestAngleDelta(facingDeg_, targetDeg) * turn;
 
-        // Sneaking is a slower, shallower step than walking.
-        const float cycleRate = sneaking_ ? cfg::kF3BobSpeed * 0.55f
-                                          : cfg::kF3BobSpeed;
-        walkCycle_ += cycleRate * deltaTime;
     }
 }
 
@@ -1784,17 +1780,15 @@ void StealthScene::drawNoise() {
 
     Renderer& renderer = ctx().renderer;
 
-    // One ring expanding to the full hearing radius and fading as it goes.
-    // When guards can hear, the moment the ring reaches one is the moment he
-    // reacts, so this is a readout of the mechanic rather than decoration.
-    const float progress = 1.0f - (noiseTimer_ / cfg::kF3NoiseDuration);
-    const float radius = cfg::kF3NoiseRadius * progress;
-    const float alpha = 0.34f * (1.0f - progress);
-
+    // A plain disc at the full hearing radius, held for as long as the noise
+    // lasts and then gone. It used to expand outward from the impact; that
+    // animation is on hold, so this just shows the area a guard would hear the
+    // rock from - which is the information the player actually needs.
     renderer.setDepthWrite(false);
     renderer.drawCylinderAt(glm::vec3(noisePos_.x, 0.04f, noisePos_.z),
-                            glm::vec3(radius * 2.0f, 0.02f, radius * 2.0f),
-                            cfg::kF3NoiseColor, alpha, 1.0f);
+                            glm::vec3(cfg::kF3NoiseRadius * 2.0f, 0.02f,
+                                      cfg::kF3NoiseRadius * 2.0f),
+                            cfg::kF3NoiseColor, 0.16f, 1.0f);
     renderer.setDepthWrite(true);
 }
 
@@ -1868,13 +1862,26 @@ void StealthScene::drawItems() {
 }
 
 void StealthScene::drawRoary() {
-    // The panther himself lives in scenes/Characters.cpp, because the boss
-    // level draws exactly the same character. All this scene has to do is say
-    // where he is and what he is doing.
-    // The leading :: matters: without it the compiler finds this member
-    // function again and the call recurses into itself forever.
-    ::drawRoary(ctx().renderer, playerPos_, facingDeg_, walkCycle_,
-                moveDir_ != glm::vec2(0.0f), cfg::kF3PlayerScale);
+    Renderer& renderer = ctx().renderer;
+
+    // Blob shadow first, flat on the deck. Translucent, so depth writes go off
+    // or it punches a hole in the floor behind it.
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(playerPos_.x, 0.015f, playerPos_.z),
+                            glm::vec3(cfg::kF3PlayerRadius * 2.3f, 0.02f,
+                                      cfg::kF3PlayerRadius * 2.3f),
+                            cfg::kF3ShadowColor, cfg::kF3ShadowAlpha, 1.0f);
+    renderer.setDepthWrite(true);
+
+    // The panther himself comes from core/MascotModels.cpp - the same shared
+    // model floors 1 and 2 draw, so he looks identical across the whole game.
+    //
+    // It is a STATIC pose: no walk bounce, no leg swing. He still turns to
+    // face where he is going, because that is orientation rather than
+    // animation, and without it you could not tell which way he was walking.
+    ::mascots::drawRoary(renderer, playerPos_,
+                         mascots::kRoaryNaturalHeight * cfg::kF3PlayerScale,
+                         facingDeg_);
 }
 
 // Converts a measurement written in "design pixels" into real screen pixels.

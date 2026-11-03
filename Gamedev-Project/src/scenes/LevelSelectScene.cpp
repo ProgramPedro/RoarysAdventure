@@ -618,7 +618,12 @@ void LevelSelectScene::drawBossProps(float centerY, bool locked) {
 
     drawOwl (glm::vec3(-0.35f, floorY, kBossZ), locked);
     drawIbis(glm::vec3( 0.95f, floorY, kBossZ), locked);
-    drawBull(glm::vec3( 2.10f, floorY, kBossZ), locked);
+    // The shared model from core/MascotModels. Passing the locked fade as the
+    // tint reproduces shade() exactly: mix(colour, kLockedGrey, kLockedFade)
+    // when locked, and mix(colour, anything, 0) == colour when not.
+    mascots::drawBull(renderer, glm::vec3( 2.10f, floorY, kBossZ),
+                      mascots::kBullNaturalHeight, 0.0f,
+                      locked ? cfg::kLockedFade : 0.0f, cfg::kLockedGrey);
 }
 
 void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool locked) {
@@ -819,67 +824,6 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
                             shade(cfg::kIbisGreen, locked));
 }
 
-void LevelSelectScene::drawBull(const glm::vec3& feetPosition, bool locked) {
-    Renderer& renderer = ctx().renderer;
-
-    const glm::vec3 body   = shade(cfg::kBullBody, locked);
-    const glm::vec3 muzzle = shade(cfg::kBullMuzzle, locked);
-    const glm::vec3 horn   = shade(cfg::kBullHorn, locked);
-
-    // Black boots, vegas gold pants.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.13f : 0.13f);
-        renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.05f, 0.03f),
-                              glm::vec3(0.17f, 0.10f, 0.24f), shade(cfg::kBullHoof, locked));
-    }
-    renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.22f, 0.0f),
-                          glm::vec3(0.44f, 0.30f, 0.38f), shade(cfg::kBullPants, locked));
-
-    // Heavy green-jerseyed chest - he is the widest of the three.
-    renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.54f, 0.0f),
-                          glm::vec3(0.60f, 0.48f, 0.44f), shade(cfg::kBullJersey, locked));
-    renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.58f, 0.21f),
-                          glm::vec3(0.11f, 0.12f, 0.04f), shade(cfg::kFiuKitTrim, locked));
-
-    // Grey arms.
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.33f : 0.33f);
-        renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.52f, 0.0f),
-                              glm::vec3(0.16f, 0.34f, 0.16f), body);
-    }
-
-    // Head and snout.
-    const glm::vec3 head = feetPosition + glm::vec3(0.0f, 0.92f, 0.0f);
-    renderer.drawSphereAt(head, glm::vec3(0.44f, 0.40f, 0.42f), body);
-    renderer.drawSphereAt(head + glm::vec3(0.0f, -0.09f, 0.19f),
-                          glm::vec3(0.30f, 0.22f, 0.22f), muzzle);
-
-    for (int side = 0; side < 2; ++side) {
-        const float x = (side == 0 ? -0.07f : 0.07f);
-        renderer.drawSphereAt(head + glm::vec3(x, -0.09f, 0.29f),
-                              glm::vec3(0.06f, 0.05f, 0.04f), shade(cfg::kEyeDark, locked));
-    }
-
-    // The gold horns. Three shrinking spheres per side trace a curve that
-    // sweeps out and then up, which is what makes them read as bull horns
-    // rather than spikes.
-    for (int side = 0; side < 2; ++side) {
-        const float sign = (side == 0 ? -1.0f : 1.0f);
-
-        renderer.drawSphereAt(head + glm::vec3(sign * 0.20f, 0.14f, 0.0f),
-                              glm::vec3(0.16f, 0.15f, 0.15f), horn);
-        renderer.drawSphereAt(head + glm::vec3(sign * 0.31f, 0.26f, 0.0f),
-                              glm::vec3(0.12f, 0.13f, 0.12f), horn);
-        renderer.drawSphereAt(head + glm::vec3(sign * 0.34f, 0.38f, 0.0f),
-                              glm::vec3(0.08f, 0.10f, 0.08f), horn);
-    }
-
-    // A heavy brow for the permanent scowl.
-    renderer.drawSphere(
-        makeTransform(head + glm::vec3(0.0f, 0.09f, 0.21f),
-                      glm::vec3(0.34f, 0.07f, 0.08f)),
-        muzzle);
-}
 
 //-----------------------------------------------------------------------------
 // Selection frame, lock icon, Roary

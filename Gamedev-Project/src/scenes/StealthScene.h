@@ -202,10 +202,6 @@ private:
     // back to a default direction the moment the key comes up.
     float facingDeg_ = 180.0f;
 
-    // Advances only while he is actually walking, so the bounce stops when he
-    // does instead of bobbing on the spot.
-    float walkCycle_ = 0.0f;
-
     // --- the guard -----------------------------------------------------------
     // One guard, standing where Config.h puts him. He does not move or see
     // anything yet. Kept as plain members rather than a Guard struct until

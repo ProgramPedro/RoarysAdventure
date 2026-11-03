@@ -61,7 +61,6 @@ private:
     // Small helpers for the boss floor.
     void drawOwl(const glm::vec3& feetPosition, bool locked);
     void drawIbis(const glm::vec3& feetPosition, bool locked);
-    void drawBull(const glm::vec3& feetPosition, bool locked);
     void drawPawlinaInCage(const glm::vec3& feetPosition, bool locked);
 
     // How tall a floor counts as on screen. The open top floor is shorter
