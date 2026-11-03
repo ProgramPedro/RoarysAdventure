@@ -21,12 +21,15 @@ add_executable(roary
     src/core/Input.cpp
     src/core/TextRenderer.cpp
     src/core/Renderer.cpp
+    src/core/MascotModels.cpp
     src/core/Screenshot.cpp
     src/core/GameProgress.cpp
     src/core/SceneManager.cpp
 
     # --- scenes --------------------------------------------------------------
     src/scenes/LevelSelectScene.cpp
+    src/scenes/PlatformerScene.cpp
+    src/scenes/TunnelScene.cpp
     src/scenes/PlaceholderLevelScene.cpp
 )
 

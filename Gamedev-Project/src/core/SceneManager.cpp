@@ -6,6 +6,8 @@
 // The concrete scenes are included HERE and nowhere else, which keeps the rest
 // of the engine from depending on any particular level.
 #include "scenes/LevelSelectScene.h"
+#include "scenes/PlatformerScene.h"
+#include "scenes/TunnelScene.h"
 #include "scenes/PlaceholderLevelScene.h"
 
 #include <iostream>
@@ -30,8 +32,8 @@ std::unique_ptr<Scene> SceneManager::createScene(SceneId id) {
         // floor it is standing in for. When a real level is written, swap the
         // line for that floor - for example:
         //     case SceneId::Floor1: return std::make_unique<PlatformerScene>();
-        case SceneId::Floor1: return std::make_unique<PlaceholderLevelScene>(0);
-        case SceneId::Floor2: return std::make_unique<PlaceholderLevelScene>(1);
+        case SceneId::Floor1: return std::make_unique<PlatformerScene>();
+        case SceneId::Floor2: return std::make_unique<TunnelScene>();
         case SceneId::Floor3: return std::make_unique<PlaceholderLevelScene>(2);
         case SceneId::Floor4: return std::make_unique<PlaceholderLevelScene>(3);
 

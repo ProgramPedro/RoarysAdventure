@@ -20,6 +20,11 @@ public:
     void setTarget(const glm::vec3& target)     { target_ = target; }
     void setFovDegrees(float fov)               { fovDegrees_ = fov; }
 
+    // Which way is "up" for this camera. The tunnel level rolls this through
+    // a full turn as the player moves onto a wall or the ceiling, which is
+    // what makes the world appear to rotate around them.
+    void setUp(const glm::vec3& up)              { up_ = up; }
+
     const glm::vec3& position() const { return position_; }
     const glm::vec3& target() const   { return target_; }
 
