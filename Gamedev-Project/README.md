@@ -2,29 +2,18 @@
 
 CAP 4052 group project.
 
----
-
 ## Team Members
 
-| Name | Panther ID |
-| --- | --- |
-|  |  |
-|  |  |
-|  |  |
-
----
+Names: Pedro Re, Remberto Tejada
 
 ## Approved Concept
 
-_To be added._
-
----
 
 ## Objective
 
 Roary, FIU's panther, climbs a tower to rescue Pawlina. Each floor of the tower
 is a level based on a different classic game genre. Clear a floor to unlock the
-one above it, and reach the top to face the rival school mascots.
+one above it, and reach the top to face the school mascots.
 
 | Floor | Name | Goal |
 | --- | --- | --- |
@@ -219,7 +208,7 @@ The first configure downloads and builds the libraries and can take a few minute
 ## External Asset Credits
 
 No external art, models, textures, sounds or fonts are used. Every character and
-object is built from basic shapes in code, and the on-screen font is a bitmap
+object is built from basic shapes in code (with help from GenAI), and the on-screen font is a bitmap
 font defined in `src/core/BitmapFont.h`.
 
 Third-party libraries (see Dependencies) are used under their own open-source
@@ -231,8 +220,6 @@ licenses:
 
 Technique reference: the moving-platform ordering on Floor 1 follows Maddy
 Thorson's Celeste / TowerFall physics write-up.
-
----
 
 ## Project Structure
 
