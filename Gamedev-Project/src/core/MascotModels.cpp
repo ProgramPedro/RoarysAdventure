@@ -39,8 +39,18 @@ void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
     const float cosRoll = std::cos(roll);
     const float sinRoll = std::sin(roll);
 
-    // Turns a local offset (x right, y up, z forward) into a world position:
-    // scale, then yaw about Y, then roll about Z, then translate.
+    // Placing body parts:
+    //   - each part is an offset from his feet, written as if he faces +Z
+    //     (x = right, y = up, z = forward)
+    //   - `at` turns that offset into a world position in four steps:
+    //     1. scale by k, so a taller Roary gets bigger offsets
+    //     2. YAW: rotate about Y to the way he's facing, using the standard
+    //        2D rotation formula on (x, z):
+    //          x' =  cos * x + sin * z
+    //          z' = -sin * x + cos * z
+    //     3. ROLL: rotate about Z the same way (only the tunnel level uses
+    //        this, to stand him on a wall; it's 0 everywhere else)
+    //     4. add his feet position to move the part into the world
     const auto at = [&](float x, float y, float z) {
         const glm::vec3 local(x * k, y * k, z * k);
         const glm::vec3 turned(cosYaw * local.x + sinYaw * local.z,
@@ -116,12 +126,12 @@ void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
 
 
 //-----------------------------------------------------------------------------
-// USF's Rocky. Grey, heavy, gold horns - and the widest of the three mascots,
-// which is why he is the one who charges.
-//
-// Lifted out of LevelSelectScene so the boss fight can draw him too. The only
-// thing added is `yawDegrees`: the menu always showed him face-on, but a boss
-// has to turn to face the direction he is about to charge in.
+// USF's Rocky
+//   - grey, heavy, gold horns
+//   - the widest of the three mascots, which is why he's the one who charges
+//   - used by both the level-select menu and the boss fight
+//   - built the same way as drawRoary() above (offsets from his feet turned
+//     by `at`), just without the roll
 //-----------------------------------------------------------------------------
 void drawBull(Renderer& renderer, const glm::vec3& feetPosition,
               float height, float yawDegrees, float tint,

@@ -24,17 +24,15 @@ inline constexpr float kBullNaturalHeight = 1.52f;
 
 //-----------------------------------------------------------------------------
 // Draws Roary standing with his feet at `feetPosition`.
-//
-//   height       total height in world units
-//   yawDegrees   which way he faces; 0 looks toward +Z (toward the camera in
-//                the level-select scene)
-//   rollDegrees  rotation about the Z axis, so he can stand on a wall or a
-//                ceiling in the tunnel level. 0 is upright.
+//   - height:      total height in world units
+//   - yawDegrees:  which way he faces, 0 = toward +Z (toward the camera in
+//                  the level-select scene)
+//   - rollDegrees: rotation about Z, so he can stand on a wall or ceiling in
+//                  the tunnel level (0 = upright)
+//   - tint:        blends his colours toward `tintColor`, 0 = normal
+//                  (the boss floor washes him pale blue while invincible;
+//                  it has a default, so other callers can leave it out)
 //-----------------------------------------------------------------------------
-//   tint         blends his colours toward `tintColor`, 0 for normal. The boss
-//                floor uses it to wash him pale while a dash is making him
-//                invincible; a hit flash would use it the same way. Defaulted,
-//                so callers that do not care are unaffected.
 void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
                float height = kRoaryNaturalHeight, float yawDegrees = 0.0f,
                float rollDegrees = 0.0f, float tint = 0.0f,
@@ -50,8 +48,9 @@ void drawEyePair(Renderer& renderer, const glm::vec3& center, float spacing,
                  const glm::vec3& pupilColor);
 
 //-----------------------------------------------------------------------------
-// USF's Rocky. `yawDegrees` turns him to face a direction - 0 looks down +Z,
-// the same convention everything else uses. `tint` works as it does for Roary.
+// USF's Rocky.
+//   - yawDegrees: which way he faces, 0 = down +Z (same as everything else)
+//   - tint:       works the same as Roary's
 //-----------------------------------------------------------------------------
 void drawBull(Renderer& renderer, const glm::vec3& feetPosition,
               float height = kBullNaturalHeight, float yawDegrees = 0.0f,
