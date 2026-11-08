@@ -32,12 +32,11 @@
 #include "core/Scene.h"
 #include "core/SceneContext.h"
 #include "core/SceneManager.h"
-#include "core/Screenshot.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <string>
 
 namespace {
 
@@ -52,15 +51,10 @@ void framebufferSizeCallback(GLFWwindow*, int width, int height) {
 // Command line options. All of them are development conveniences; the game
 // needs no arguments to run normally.
 //
-//   --screenshot <file>  render a few frames, save a PPM image, then exit
-//   --frames <n>         how many frames to render first (default 3), so any
-//                        animation has settled before the image is taken
 //   --unlock-all         start with every floor unlocked
 //   --floor <1-4>        open straight into that floor instead of the menu
 //-----------------------------------------------------------------------------
 struct Options {
-    std::string screenshotPath;
-    int  framesBeforeScreenshot = 3;
     bool unlockAll = false;
     int  startFloor = 0;  // 0 means "start on the level select screen"
 };
@@ -71,11 +65,7 @@ Options parseCommandLine(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         const char* arg = argv[i];
 
-        if (std::strcmp(arg, "--screenshot") == 0 && i + 1 < argc) {
-            options.screenshotPath = argv[++i];
-        } else if (std::strcmp(arg, "--frames") == 0 && i + 1 < argc) {
-            options.framesBeforeScreenshot = std::max(1, std::atoi(argv[++i]));
-        } else if (std::strcmp(arg, "--unlock-all") == 0) {
+        if (std::strcmp(arg, "--unlock-all") == 0) {
             options.unlockAll = true;
         } else if (std::strcmp(arg, "--floor") == 0 && i + 1 < argc) {
             options.startFloor = std::clamp(std::atoi(argv[++i]), 0, cfg::kFloorCount);
@@ -167,7 +157,6 @@ int main(int argc, char** argv) {
     // Main loop
     //-------------------------------------------------------------------------
     double previousTime = glfwGetTime();
-    int frameCount = 0;
 
     while (!glfwWindowShouldClose(window) && !manager.quitRequested()) {
         glfwPollEvents();
@@ -197,18 +186,6 @@ int main(int argc, char** argv) {
 
         renderer.beginFrame(context.framebufferWidth, context.framebufferHeight);
         scene->render();
-
-        ++frameCount;
-
-        // --screenshot mode: save the finished frame and stop.
-        if (!options.screenshotPath.empty() &&
-            frameCount >= options.framesBeforeScreenshot) {
-            screenshot::saveFramebuffer(options.screenshotPath,
-                                        context.framebufferWidth,
-                                        context.framebufferHeight);
-            glfwSwapBuffers(window);
-            break;
-        }
 
         glfwSwapBuffers(window);
 
