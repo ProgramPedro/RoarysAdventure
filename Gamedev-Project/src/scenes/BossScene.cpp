@@ -1,6 +1,8 @@
-// BossScene.cpp, Top floor, Rival Showdown
-// Rocky loops through Waiting, Telegraph, Charging, Stunned and Recover. Dodge the
-// charge so he hits the wall, then touch him while he is stunned to damage him.
+// Runs the boss fight. Rocky cycles through waiting, telegraphing, charging,
+// stunned and recovering, so his charge has to be dodged rather than blocked.
+// Dashing carries Roary clear and makes him briefly invulnerable, on a cooldown,
+// and touching Rocky while he is stunned takes health off him. The scene shows a
+// win or lose message once either side runs out.
 
 #include "scenes/BossScene.h"
 
@@ -59,7 +61,6 @@ void BossScene::handleInput(const Input& input) {
     }
 }
 
-// A short burst that cannot be steered, and Roary cannot be hurt while it lasts
 void BossScene::startDash() {
     if (dashCooldown_ > 0.0f || dashTimer_ > 0.0f) {
         return;
@@ -86,7 +87,6 @@ void BossScene::updateDash(float deltaTime) {
     }
 }
 
-// If the position is too far from the centre, scale it back onto the edge
 glm::vec3 BossScene::clampToArena(const glm::vec3& position, float radius) const {
     const float limit = cfg::kF4ArenaRadius - radius;
     const float distance = std::sqrt(position.x * position.x +
@@ -126,7 +126,6 @@ void BossScene::setRockyState(RockyState state, float duration) {
     rockyTimer_ = duration;
 }
 
-// Rocky's state machine. Each state runs until its timer runs out or he hits the wall
 void BossScene::updateRocky(float deltaTime) {
     if (rockyState_ == RockyState::Beaten) {
         return;
@@ -140,7 +139,6 @@ void BossScene::updateRocky(float deltaTime) {
 
     switch (rockyState_) {
     case RockyState::Waiting: {
-        // Face Roary and walk toward him until he is close enough
         rockyFacingDeg_ = toPlayerDeg;
 
         const float distance = std::sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
@@ -157,7 +155,6 @@ void BossScene::updateRocky(float deltaTime) {
     }
 
     case RockyState::Telegraph: {
-        // His aim is locked, so stepping to the side dodges the charge
         if (rockyTimer_ <= 0.0f) {
             const float facingRad = glm::radians(rockyFacingDeg_);
             chargeDir_ = glm::vec2(std::sin(facingRad), std::cos(facingRad));
@@ -172,7 +169,6 @@ void BossScene::updateRocky(float deltaTime) {
 
         checkChargeContact();
 
-        // If the clamp had to move him, he just hit the wall
         const glm::vec3 clamped = clampToArena(rockyPos_, cfg::kF4RockyRadius);
         const bool hitTheWall = (clamped.x != rockyPos_.x || clamped.z != rockyPos_.z);
         rockyPos_ = clamped;
@@ -200,7 +196,6 @@ void BossScene::updateRocky(float deltaTime) {
     }
 }
 
-// Two circles touch when the distance between them is at most their radii added
 void BossScene::checkChargeContact() {
     if (isInvulnerable()) {
         return;
@@ -327,7 +322,6 @@ void BossScene::drawArena() {
         cfg::kF4Deck);
 }
 
-// His tint shows what he is doing. Red means he is about to charge, orange means he is stunned
 void BossScene::drawRocky() {
     if (rockyState_ == RockyState::Beaten) {
         return;
@@ -348,7 +342,6 @@ void BossScene::drawRocky() {
                       rockyFacingDeg_, tint, tintColor);
 }
 
-// Tinted pale blue while he cannot be hurt
 void BossScene::drawPlayer() {
     const float tint = isInvulnerable() ? cfg::kF4InvulnTintMix : 0.0f;
 

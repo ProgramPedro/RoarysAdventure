@@ -1,7 +1,9 @@
 #pragma once
-// BossScene, Top floor, Rival Showdown
-// A dodging fight against Rocky the bull. Roary can only move and dash, and Rocky
-// is damaged by touching him while he is stunned. Tuning values are in Config.h.
+
+// The top floor, Rival Showdown: a dodging fight against Rocky the bull. Roary
+// can only move and dash, and Rocky is hurt by being baited into the wall and then
+// touched while he is stunned. Roary has hearts, Rocky has health, and the tuning
+// lives in the cfg::kF4 values in Config.h.
 
 #include "core/Config.h"
 #include "core/Scene.h"
@@ -21,7 +23,6 @@ public:
 private:
     static const int kFloorIndex = 3;
 
-    // Rocky is always in exactly one of these states
     enum class RockyState {
         Waiting,
         Telegraph,
@@ -56,19 +57,16 @@ private:
 
     float px(float designPixels) const;
 
-    // Roary
     glm::vec3 playerPos_{0.0f};
     glm::vec2 moveDir_{0.0f, 0.0f};
     float     facingDeg_         = 180.0f;
     int       hearts_            = cfg::kF4MaxHearts;
     float     playerInvulnTimer_ = 0.0f;
 
-    // Dash
     float     dashTimer_    = 0.0f;
     float     dashCooldown_ = 0.0f;
     glm::vec2 dashDir_{0.0f, 1.0f};
 
-    // Rocky
     RockyState rockyState_     = RockyState::Waiting;
     float      rockyTimer_     = 0.0f;
     int        rockyHealth_    = cfg::kF4RockyHealth;
@@ -76,7 +74,6 @@ private:
     float      rockyFacingDeg_ = 0.0f;
     glm::vec2  chargeDir_{0.0f, 1.0f};
 
-    // Win or lose message
     float outcomeTimer_ = 0.0f;
     bool  victory_      = false;
 

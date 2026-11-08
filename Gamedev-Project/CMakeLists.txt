@@ -26,14 +26,14 @@ add_executable(roary
     src/core/TextRenderer.cpp
     src/core/Renderer.cpp
     src/core/MascotModels.cpp
-    src/core/Screenshot.cpp
     src/core/GameProgress.cpp
     src/core/SceneManager.cpp
 
     src/scenes/LevelSelectScene.cpp
     src/scenes/PlatformerScene.cpp
     src/scenes/TunnelScene.cpp
-    src/scenes/PlaceholderLevelScene.cpp
+    src/scenes/BossScene.cpp
+    src/scenes/StealthScene.cpp
 )
 
 target_include_directories(roary PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -50,10 +50,3 @@ if(MSVC)
 else()
     target_compile_options(roary PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-
-add_custom_command(TARGET roary POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:roary>/assets"
-    COMMENT "Copying assets to output directory"
-)

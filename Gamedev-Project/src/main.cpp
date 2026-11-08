@@ -3,7 +3,7 @@
 // delta time, snapshot input, then hand handleInput, update and render to the
 // current scene. The pending scene switch is applied last, after the frame has
 // been presented, which is what lets a scene safely ask to switch at any point.
-// Also parses the --screenshot, --frames, --floor and --unlock-all dev flags.
+// Also parses the --floor and --unlock-all development flags.
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -15,12 +15,11 @@
 #include "core/Scene.h"
 #include "core/SceneContext.h"
 #include "core/SceneManager.h"
-#include "core/Screenshot.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <string>
 
 namespace {
 void framebufferSizeCallback(GLFWwindow*, int width, int height) {
@@ -28,8 +27,6 @@ void framebufferSizeCallback(GLFWwindow*, int width, int height) {
 }
 
 struct Options {
-    std::string screenshotPath;
-    int  framesBeforeScreenshot = 3;
     bool unlockAll = false;
     int  startFloor = 0;
 };
@@ -40,11 +37,7 @@ Options parseCommandLine(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         const char* arg = argv[i];
 
-        if (std::strcmp(arg, "--screenshot") == 0 && i + 1 < argc) {
-            options.screenshotPath = argv[++i];
-        } else if (std::strcmp(arg, "--frames") == 0 && i + 1 < argc) {
-            options.framesBeforeScreenshot = std::max(1, std::atoi(argv[++i]));
-        } else if (std::strcmp(arg, "--unlock-all") == 0) {
+        if (std::strcmp(arg, "--unlock-all") == 0) {
             options.unlockAll = true;
         } else if (std::strcmp(arg, "--floor") == 0 && i + 1 < argc) {
             options.startFloor = std::clamp(std::atoi(argv[++i]), 0, cfg::kFloorCount);
@@ -122,7 +115,6 @@ int main(int argc, char** argv) {
     manager.applyPendingSwitch(context);
 
     double previousTime = glfwGetTime();
-    int frameCount = 0;
 
     while (!glfwWindowShouldClose(window) && !manager.quitRequested()) {
         glfwPollEvents();
@@ -148,17 +140,6 @@ int main(int argc, char** argv) {
 
         renderer.beginFrame(context.framebufferWidth, context.framebufferHeight);
         scene->render();
-
-        ++frameCount;
-
-        if (!options.screenshotPath.empty() &&
-            frameCount >= options.framesBeforeScreenshot) {
-            screenshot::saveFramebuffer(options.screenshotPath,
-                                        context.framebufferWidth,
-                                        context.framebufferHeight);
-            glfwSwapBuffers(window);
-            break;
-        }
 
         glfwSwapBuffers(window);
 
