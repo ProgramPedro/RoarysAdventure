@@ -3,7 +3,6 @@
 // Sneak past the guard, collect the four paws, and leave through the door.
 // Rocks can be thrown to distract the guard. Tuning values are in Config.h (kF3).
 
-#include "core/Camera.h"
 #include "core/Config.h"
 #include "core/Scene.h"
 
@@ -36,10 +35,10 @@ private:
 
     void updateGuard(float deltaTime);
     void resetGuard();
+    float visionRange() const;
     bool guardCanSeePlayer() const;
     bool guardIsDistracted() const { return guardAlertTimer_ > 0.0f; }
 
-    void updateSuspicion(float deltaTime);
     void getCaught();
 
     void collectNearbyItems();
@@ -47,13 +46,7 @@ private:
     bool doorIsOpen() const;
     void checkDoor();
 
-    void updateAim(const Input& input);
     void throwRock();
-    void updateRock(float deltaTime);
-    void raiseNoise(const glm::vec3& position);
-
-    Camera makeCamera() const;
-    bool screenToFloor(const glm::vec2& screenPos, glm::vec3& outFloor) const;
 
     void drawRoom();
     void drawRoary();
@@ -61,11 +54,6 @@ private:
     void drawVisionCone();
     void drawItems();
     void drawDoor();
-    void drawAimMarker();
-    void drawRock();
-    void drawNoise();
-    void drawAlertMark();
-    void drawSuspicionMeter();
     void drawUi();
 
     float px(float designPixels) const;
@@ -73,40 +61,24 @@ private:
     // Roary
     glm::vec3 playerPos_{0.0f};
     glm::vec2 moveDir_{0.0f, 0.0f};
-    float     facingDeg_ = 180.0f;
-    bool      sneaking_  = false;
+    float     facingDeg_        = 180.0f;
+    bool      sneaking_         = false;
+    float     caughtFlashTimer_ = 0.0f;
 
     // Guard
     glm::vec3 guardPos_{0.0f};
-    float     guardFacingDeg_  = 0.0f;
-    int       patrolIndex_     = 0;
-    float     guardPauseTimer_ = 0.0f;
-    float     guardAlertTimer_ = 0.0f;
+    float     guardFacingDeg_         = 0.0f;
+    int       patrolIndex_            = 0;
+    float     guardPauseTimer_        = 0.0f;
+    float     guardAlertTimer_        = 0.0f;
     glm::vec3 guardAlertTarget_{0.0f};
-    bool      playerSeen_      = false;
+    float     guardFacingBeforeAlert_ = 0.0f;
 
-    // Suspicion
-    float suspicion_        = 0.0f;
-    float sightLostTimer_   = 0.0f;
-    float caughtFlashTimer_ = 0.0f;
-
-    // Paws and door
+    // Paws
     std::array<bool, cfg::kF3ItemCount> itemCollected_{};
-    float lockedFlashTimer_ = 0.0f;
 
     // Rocks
-    int       rocksLeft_    = 0;
-    bool      aiming_       = false;
-    bool      aimValid_     = false;
-    bool      aimBlocked_   = false;
-    glm::vec3 aimImpact_{0.0f};
-    bool      rockInFlight_ = false;
-    glm::vec3 rockFrom_{0.0f};
-    glm::vec3 rockTo_{0.0f};
-    float     rockElapsed_  = 0.0f;
-    float     rockDuration_ = 0.0f;
-    glm::vec3 noisePos_{0.0f};
-    float     noiseTimer_   = 0.0f;
+    int rocksLeft_ = 0;
 
     float uiScale_ = 1.0f;
 };

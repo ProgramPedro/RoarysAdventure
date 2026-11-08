@@ -57,9 +57,8 @@ one above it, and reach the top to face the school mascots.
 | Key | Action |
 | --- | --- |
 | `W` `A` `S` `D` / arrows | Move |
-| `Shift` | Sneak (slower, harder to notice) |
-| `E` | Aim a rock (press again to cancel) |
-| Mouse click | Throw the rock while aiming |
+| `Shift` | Sneak (slower, but the guard can't see as far) |
+| `E` | Throw a rock straight ahead |
 
 ### Top Floor - Rival Showdown
 
@@ -101,18 +100,24 @@ one above it, and reach the top to face the school mascots.
 - Top-down movement with wall collision and wall sliding
 - A guard that patrols a loop of waypoints, pausing at each one
 - Vision cone: the guard sees Roary only when he's in range, inside the cone, and not behind a wall
-- Suspicion meter that fills while Roary is seen (faster up close, slower when sneaking) and drains when he hides
-- Getting caught sends Roary back to the start, keeping collected paws
+- Being seen means getting caught: Roary goes back to the start, keeping collected paws
+- Sneaking shortens how far the guard can see (the cone shrinks to match)
 - Four collectible paws that unlock the exit door
-- Throwable rocks aimed with the mouse; rocks stop at walls
-- Noise distraction: a rock landing near the guard makes him turn toward it
+- Throwable rocks: a rock flies straight ahead of Roary and lands at the first wall
+  in the way (or at its maximum range)
+- Noise distraction: a rock landing near the guard makes him look at it for a few
+  seconds, then turn back and carry on along his route
+- Feedback is kept minimal: the cone turns amber while the guard is distracted,
+  the door turns green when it opens, and Roary flashes red when caught
 
 ### Top Floor - Rival Showdown
 - Round arena with a dash that has invincibility and a cooldown
 - Rocky the bull, driven by a state machine: Waiting, Telegraph, Charging, Stunned, Recover
-- Telegraphed charges with a lane shown on the floor before he moves
-- Rocky is stunned when he hits the wall; touching him then damages him
+- Telegraphed charges: Rocky faces Roary, then locks his aim and turns red while he
+  winds up, then charges in a straight line
+- Rocky is stunned (turns orange) when he hits the wall; touching him then damages him
 - Hearts for Roary with brief invulnerability after a hit; the fight restarts after three hits
+- Roary is tinted pale blue while he can't be hurt
 
 ---
 
@@ -199,6 +204,7 @@ The first configure downloads and builds the libraries and can take a few minute
   - only one guard
   - the vision cone is drawn through walls, though the guard can't actually see through them
   - the guard walks through Roary and never goes to investigate a noise
+  - thrown rocks land instantly; there is no flight animation
 - Top floor:
   - only Rocky is in the fight; Owlsley and Sebastian are not implemented yet
   - rescuing Pawlina at the end is not implemented yet

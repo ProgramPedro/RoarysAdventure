@@ -4,7 +4,6 @@
 
 #include "scenes/BossScene.h"
 
-#include "core/Angles.h"
 #include "core/MascotModels.h"
 
 #include "core/Camera.h"
@@ -141,8 +140,8 @@ void BossScene::updateRocky(float deltaTime) {
 
     switch (rockyState_) {
     case RockyState::Waiting: {
-        const float turn = std::min(cfg::kF4RockyTurnRate * deltaTime, 1.0f);
-        rockyFacingDeg_ += shortestAngleDelta(rockyFacingDeg_, toPlayerDeg) * turn;
+        // Face Roary and walk toward him
+        rockyFacingDeg_ = toPlayerDeg;
 
         const float distance = std::sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
         if (distance > cfg::kF4RockyKeepDistance) {
@@ -158,9 +157,7 @@ void BossScene::updateRocky(float deltaTime) {
     }
 
     case RockyState::Telegraph: {
-        const float turn = std::min(cfg::kF4RockyTurnRate * 0.35f * deltaTime, 1.0f);
-        rockyFacingDeg_ += shortestAngleDelta(rockyFacingDeg_, toPlayerDeg) * turn;
-
+        // His aim is locked, so stepping to the side dodges the charge
         if (rockyTimer_ <= 0.0f) {
             const float facingRad = glm::radians(rockyFacingDeg_);
             chargeDir_ = glm::vec2(std::sin(facingRad), std::cos(facingRad));
@@ -320,57 +317,17 @@ void BossScene::render() {
     drawArena();
     drawRocky();
     drawPlayer();
-    drawChargeLane();
     drawUi();
 }
 
 void BossScene::drawArena() {
-    Renderer& renderer = ctx().renderer;
-
-    const float floorSize = cfg::kF4ArenaRadius * 2.0f;
-    const float rimSize   = (cfg::kF4ArenaRadius + cfg::kF4RimWidth) * 2.0f;
-    const float thick     = cfg::kF4DeckThickness;
-
-    renderer.drawCylinderAt(glm::vec3(0.0f, -thick * 0.5f - 0.01f, 0.0f),
-                            glm::vec3(rimSize, thick, rimSize),
-                            cfg::kF4Rim);
-
-    renderer.drawCylinderAt(glm::vec3(0.0f, -thick * 0.5f, 0.0f),
-                            glm::vec3(floorSize, thick, floorSize),
-                            cfg::kF4Deck);
+    ctx().renderer.drawCylinderAt(
+        glm::vec3(0.0f, -cfg::kF4DeckThickness * 0.5f, 0.0f),
+        glm::vec3(cfg::kF4ArenaRadius * 2.0f, cfg::kF4DeckThickness, cfg::kF4ArenaRadius * 2.0f),
+        cfg::kF4Deck);
 }
 
-void BossScene::drawChargeLane() {
-    if (rockyState_ != RockyState::Telegraph) {
-        return;
-    }
-
-    Renderer& renderer = ctx().renderer;
-
-    const float facingRad = glm::radians(rockyFacingDeg_);
-    const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
-
-    // Step forward from Rocky until the next step would leave the arena
-    const float limit = cfg::kF4ArenaRadius - cfg::kF4RockyRadius;
-    const float stepSize = 0.1f;
-    float length = 0.0f;
-
-    while (glm::length(rockyPos_ + forward * (length + stepSize)) <= limit) {
-        length += stepSize;
-    }
-    length = std::max(length, 0.5f);
-
-    const glm::vec3 centre = rockyPos_ + forward * (length * 0.5f);
-
-    renderer.setDepthWrite(false);
-    renderer.drawBox(
-        makeTransform(glm::vec3(centre.x, 0.03f, centre.z),
-                      glm::vec3(cfg::kF4LaneWidth, 0.02f, length),
-                      glm::vec3(0.0f, rockyFacingDeg_, 0.0f)),
-        cfg::kF4LaneColor, cfg::kF4LaneAlpha, 1.0f);
-    renderer.setDepthWrite(true);
-}
-
+// His tint shows what he's doing: red = about to charge, orange = stunned (hit him now)
 void BossScene::drawRocky() {
     if (rockyState_ == RockyState::Beaten) {
         return;
@@ -379,18 +336,19 @@ void BossScene::drawRocky() {
     float tint = 0.0f;
     glm::vec3 tintColor(1.0f);
 
-    if (rockyState_ == RockyState::Stunned) {
-        tint = 0.55f;
+    if (rockyState_ == RockyState::Telegraph) {
+        tint = 0.5f;
+        tintColor = cfg::kF4RockyTelegraphTint;
+    } else if (rockyState_ == RockyState::Stunned) {
+        tint = 0.5f;
         tintColor = cfg::kF4RockyStunTint;
-    } else if (rockyState_ == RockyState::Recover) {
-        tint = 0.40f;
-        tintColor = cfg::kF4RockyHurtTint;
     }
 
     mascots::drawBull(ctx().renderer, rockyPos_, cfg::kF4RockyHeight,
                       rockyFacingDeg_, tint, tintColor);
 }
 
+// Tinted pale blue while he can't be hurt
 void BossScene::drawPlayer() {
     const float tint = isInvulnerable() ? cfg::kF4InvulnTintMix : 0.0f;
 
@@ -422,19 +380,12 @@ void BossScene::drawUi() {
     text.draw("ROCKY " + std::to_string(rockyHealth_) + "/" + std::to_string(cfg::kF4RockyHealth),
               px(24.0f), px(54.0f), hint, cfg::kTextPrimary);
     text.draw(dashCooldown_ <= 0.0f ? "DASH READY" : "DASH RECHARGING",
-              px(24.0f), px(84.0f), hint,
-              dashCooldown_ <= 0.0f ? cfg::kTextComplete : cfg::kTextDim);
+              px(24.0f), px(84.0f), hint, cfg::kTextPrimary);
 
     if (outcomeTimer_ > 0.0f) {
         text.drawCentered(victory_ ? "ROCKY IS DOWN!" : "KNOCKED OUT - TRY AGAIN",
                           centerX, bottom * 0.42f, px(cfg::kFloorNameScale),
                           victory_ ? cfg::kTextComplete : cfg::kTextLocked);
-    } else if (rockyState_ == RockyState::Telegraph) {
-        text.drawCentered("HE IS GOING TO CHARGE - GET OUT OF THE LANE",
-                          centerX, bottom - px(126.0f), hint, cfg::kTextLocked);
-    } else if (rockyState_ == RockyState::Stunned) {
-        text.drawCentered("HE IS DOWN - TOUCH HIM NOW",
-                          centerX, bottom - px(126.0f), hint, cfg::kTextComplete);
     }
 
     text.drawCentered("WASD - MOVE     SPACE - DASH",

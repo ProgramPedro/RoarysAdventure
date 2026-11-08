@@ -316,18 +316,14 @@ const float kF3GuardRadius     = 0.45f;
 const float kF3GuardBodyHeight = 1.45f;
 const float kF3GuardHeadSize   = 0.52f;
 
-const glm::vec3 kF3GuardStart   {1.0f, 0.0f, -2.0f};
-
-const float     kF3GuardFacing  = 35.0f;
-
 const float kF3VisionRange        = 9.0f;
 const float kF3VisionHalfAngleDeg = 30.0f;
+const float kF3SneakVisionMul     = 0.6f;   // vision range while Roary sneaks
 
 const float kF3ConeApexY  = 0.26f;
 const float kF3ConeHeight = 0.40f;
 
 const glm::vec3 kF3ConeCalm  {0.675f, 0.886f, 0.937f};
-const glm::vec3 kF3ConeAlert {0.961f, 0.345f, 0.286f};
 const float     kF3ConeAlpha = 0.20f;
 
 const glm::vec3 kF3ItemPositions[] = {
@@ -355,26 +351,12 @@ const float kF3DoorTriggerRadius = 1.80f;
 const glm::vec3 kF3DoorLocked {0.451f, 0.149f, 0.173f};
 const glm::vec3 kF3DoorOpen   {0.333f, 0.871f, 0.522f};
 
-const float kF3LockedFlashTime = 1.60f;
-
 const int   kF3RockCount      = 5;
-const float kF3RockThrowRange = 12.0f;
-const float kF3RockSpeed      = 15.0f;
-const float kF3RockRadius     = 0.17f;
-
-const glm::vec3 kF3RockColor {0.545f, 0.580f, 0.620f};
-
-const glm::vec3 kF3MarkerOpen    {0.675f, 0.886f, 0.937f};
-const glm::vec3 kF3MarkerBlocked {0.949f, 0.639f, 0.212f};
+const float kF3RockThrowRange = 8.0f;   // how far ahead of Roary a rock flies
 
 const float kF3NoiseRadius   = 5.50f;
-const float kF3NoiseDuration = 1.30f;
-const glm::vec3 kF3NoiseColor {0.812f, 0.965f, 1.000f};
 
 const float kF3GuardAlertTime = 4.00f;
-
-const glm::vec3 kF3AlertMark {1.000f, 0.776f, 0.180f};
-const float kF3AlertMarkY = 1.15f;
 
 const glm::vec3 kF3ConeAlerted {0.949f, 0.639f, 0.212f};
 
@@ -399,16 +381,8 @@ const int kF3PatrolCount =
 
 const float kF3GuardSpeed = 2.60f;
 
-const float kF3SuspicionNearRate = 1.45f;
-const float kF3SuspicionFarRate  = 0.38f;
-const float kF3SuspicionSneakMul = 0.62f;
-const float kF3SuspicionDrain    = 0.42f;
-const float kF3SuspicionGrace    = 0.80f;
-const float kF3CaughtFlashTime   = 2.20f;
-
-const glm::vec3 kF3MeterFill   {0.961f, 0.345f, 0.286f};
-const float     kF3MeterWidth  = 260.0f;
-const float     kF3MeterHeight = 14.0f;
+const float     kF3CaughtFlashTime = 1.00f;  // how long Roary is tinted red after being caught
+const glm::vec3 kF3CaughtTint {0.961f, 0.345f, 0.286f};
 
 const glm::vec3 kF3CameraPos    {0.0f, 26.16f, 21.71f};
 const glm::vec3 kF3CameraTarget {0.0f, 0.0f, 2.00f};
@@ -423,8 +397,6 @@ const float kF4ArenaRadius   = 11.0f;
 const float kF4DeckThickness = 0.30f;
 
 const glm::vec3 kF4Deck     {0.180f, 0.055f, 0.098f};
-const glm::vec3 kF4Rim      {0.482f, 0.176f, 0.278f};
-const float     kF4RimWidth = 0.55f;
 
 const float kF4PlayerRadius = 0.42f;
 const float kF4PlayerScale  = 1.55f;
@@ -444,7 +416,6 @@ const int   kF4RockyHealth     = 3;
 const float kF4RockyRadius     = 0.75f;
 const float kF4RockyHeight     = 2.30f;
 const float kF4RockyWalkSpeed  = 1.60f;
-const float kF4RockyTurnRate   = 2.60f;
 
 const glm::vec3 kF4RockyStartPos {0.0f, 0.0f, -4.0f};
 
@@ -460,12 +431,8 @@ const float kF4RockyPunishRange = 1.70f;
 
 const float kF4PlayerHitInvuln = 1.30f;
 
-const float     kF4LaneWidth    = 2.00f;
-const glm::vec3 kF4LaneColor    {0.961f, 0.345f, 0.286f};
-const float     kF4LaneAlpha    = 0.26f;
-
-const glm::vec3 kF4RockyHurtTint {1.000f, 1.000f, 1.000f};
-const glm::vec3 kF4RockyStunTint {0.961f, 0.549f, 0.286f};
+const glm::vec3 kF4RockyTelegraphTint {0.961f, 0.200f, 0.200f};
+const glm::vec3 kF4RockyStunTint      {0.961f, 0.549f, 0.286f};
 
 const float kF4VictoryTime = 2.60f;
 const float kF4DefeatTime  = 2.20f;

@@ -51,7 +51,6 @@ private:
 
     void drawArena();
     void drawRocky();
-    void drawChargeLane();
     void drawPlayer();
     void drawUi();
 

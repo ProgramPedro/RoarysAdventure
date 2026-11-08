@@ -4,9 +4,9 @@
 
 #include "scenes/StealthScene.h"
 
-#include "core/Angles.h"
 #include "core/MascotModels.h"
 
+#include "core/Camera.h"
 #include "core/GameProgress.h"
 #include "core/Input.h"
 #include "core/Renderer.h"
@@ -51,27 +51,17 @@ glm::mat4 visionConeTransform(const glm::vec3& apex, float facingDeg,
 } // namespace
 
 bool StealthScene::init() {
-    playerPos_   = cfg::kF3StartPos;
-    moveDir_     = glm::vec2(0.0f);
-    facingDeg_   = 180.0f;
-    sneaking_    = false;
-
-    resetGuard();
-    playerSeen_ = false;
-
-    suspicion_        = 0.0f;
-    sightLostTimer_   = 0.0f;
+    playerPos_        = cfg::kF3StartPos;
+    moveDir_          = glm::vec2(0.0f);
+    facingDeg_        = 180.0f;
+    sneaking_         = false;
     caughtFlashTimer_ = 0.0f;
 
-    itemCollected_.fill(false);
-    lockedFlashTimer_ = 0.0f;
+    resetGuard();
 
-    rocksLeft_    = cfg::kF3RockCount;
-    aiming_       = false;
-    aimValid_     = false;
-    aimBlocked_   = false;
-    rockInFlight_ = false;
-    noiseTimer_   = 0.0f;
+    itemCollected_.fill(false);
+
+    rocksLeft_ = cfg::kF3RockCount;
 
     return true;
 }
@@ -106,19 +96,7 @@ void StealthScene::handleInput(const Input& input) {
              || input.isDown(GLFW_KEY_RIGHT_SHIFT);
 
     if (input.wasPressed(GLFW_KEY_E)) {
-        if (aiming_) {
-            aiming_ = false;
-        } else if (rocksLeft_ > 0 && !rockInFlight_) {
-            aiming_ = true;
-        }
-    }
-
-    if (aiming_) {
-        updateAim(input);
-
-        if (input.wasMouseClicked()) {
-            throwRock();
-        }
+        throwRock();
     }
 }
 
@@ -223,12 +201,8 @@ void StealthScene::movePlayer(float deltaTime) {
 
 void StealthScene::collectNearbyItems() {
     for (int i = 0; i < cfg::kF3ItemCount; ++i) {
-        if (itemCollected_[i]) {
-            continue;
-        }
-
-        if (floorDistance(playerPos_, cfg::kF3ItemPositions[i])
-                <= cfg::kF3ItemPickupRadius) {
+        if (!itemCollected_[i] &&
+            floorDistance(playerPos_, cfg::kF3ItemPositions[i]) <= cfg::kF3ItemPickupRadius) {
             itemCollected_[i] = true;
         }
     }
@@ -246,23 +220,19 @@ bool StealthScene::doorIsOpen() const {
 void StealthScene::checkDoor() {
     const glm::vec3 door(cfg::kF3RoomHalfX, 0.0f, cfg::kF3DoorZ);
 
-    if (floorDistance(playerPos_, door) > cfg::kF3DoorTriggerRadius) {
-        return;
-    }
-
-    if (doorIsOpen()) {
+    if (doorIsOpen() && floorDistance(playerPos_, door) <= cfg::kF3DoorTriggerRadius) {
         ctx().progress.markCompleted(kFloorIndex);
         returnToMenu();
-        return;
     }
-
-    lockedFlashTimer_ = cfg::kF3LockedFlashTime;
 }
 
+// The guard starts on patrol point 0, facing point 1, so he's always on his route
 void StealthScene::resetGuard() {
-    guardPos_        = cfg::kF3GuardStart;
-    guardFacingDeg_  = cfg::kF3GuardFacing;
-    patrolIndex_     = 0;
+    const glm::vec3& first = cfg::kF3PatrolPoints[0].position;
+    patrolIndex_ = 1;
+
+    guardPos_        = first;
+    guardFacingDeg_  = angleToward(first, cfg::kF3PatrolPoints[patrolIndex_].position);
     guardPauseTimer_ = 0.0f;
     guardAlertTimer_ = 0.0f;
 }
@@ -272,11 +242,10 @@ void StealthScene::updateGuard(float deltaTime) {
     float targetFacingDeg = guardFacingDeg_;
 
     if (guardIsDistracted()) {
+        // Face the noise until the timer runs out, then turn back the way he was facing
         guardAlertTimer_ = std::max(0.0f, guardAlertTimer_ - deltaTime);
-
-        if (floorDistance(guardPos_, guardAlertTarget_) > 0.01f) {
-            targetFacingDeg = angleToward(guardPos_, guardAlertTarget_);
-        }
+        targetFacingDeg = guardIsDistracted() ? angleToward(guardPos_, guardAlertTarget_)
+                                              : guardFacingBeforeAlert_;
     } else if (guardPauseTimer_ > 0.0f) {
         guardPauseTimer_ = std::max(0.0f, guardPauseTimer_ - deltaTime);
     } else {
@@ -298,21 +267,29 @@ void StealthScene::updateGuard(float deltaTime) {
     guardFacingDeg_ = targetFacingDeg;
 }
 
+// Sneaking makes the guard's vision shorter
+float StealthScene::visionRange() const {
+    return sneaking_ ? cfg::kF3VisionRange * cfg::kF3SneakVisionMul : cfg::kF3VisionRange;
+}
+
 // Seen = in range, inside the cone's angle, and no wall in between
 bool StealthScene::guardCanSeePlayer() const {
     const float distance = floorDistance(guardPos_, playerPos_);
 
-    if (distance > cfg::kF3VisionRange) {
+    if (distance > visionRange()) {
         return false;
     }
     if (distance < 0.01f) {
         return true;
     }
 
-    const float angleToPlayer = angleToward(guardPos_, playerPos_);
-    const float offCentre = std::fabs(shortestAngleDelta(guardFacingDeg_, angleToPlayer));
+    // Inside the cone if the angle between his facing and the direction to Roary
+    // is small enough. The dot product of two unit vectors is the cosine of that angle.
+    const float facingRad = glm::radians(guardFacingDeg_);
+    const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
+    const glm::vec3 toPlayer = (playerPos_ - guardPos_) / distance;
 
-    if (offCentre > cfg::kF3VisionHalfAngleDeg) {
+    if (glm::dot(forward, toPlayer) < std::cos(glm::radians(cfg::kF3VisionHalfAngleDeg))) {
         return false;
     }
 
@@ -321,150 +298,38 @@ bool StealthScene::guardCanSeePlayer() const {
     return !blocked;
 }
 
-void StealthScene::updateSuspicion(float deltaTime) {
-    caughtFlashTimer_ = std::max(0.0f, caughtFlashTimer_ - deltaTime);
-
-    if (playerSeen_) {
-        const float distance  = floorDistance(guardPos_, playerPos_);
-        // Fills faster the closer Roary is (lerp between the far and near rates)
-        const float closeness = 1.0f - std::clamp(distance / cfg::kF3VisionRange, 0.0f, 1.0f);
-
-        float rate = cfg::kF3SuspicionFarRate
-                   + (cfg::kF3SuspicionNearRate - cfg::kF3SuspicionFarRate) * closeness;
-
-        if (sneaking_) {
-            rate *= cfg::kF3SuspicionSneakMul;
-        }
-
-        suspicion_ += rate * deltaTime;
-        sightLostTimer_ = cfg::kF3SuspicionGrace;
-
-        if (suspicion_ >= 1.0f) {
-            getCaught();
-        }
-    } else if (sightLostTimer_ > 0.0f) {
-        sightLostTimer_ = std::max(0.0f, sightLostTimer_ - deltaTime);
-    } else {
-        suspicion_ = std::max(0.0f, suspicion_ - cfg::kF3SuspicionDrain * deltaTime);
-    }
-}
-
+// Seen = caught: back to the start, but the collected paws are kept
 void StealthScene::getCaught() {
-    playerPos_ = cfg::kF3StartPos;
-    moveDir_   = glm::vec2(0.0f);
-    facingDeg_ = 180.0f;
-
-    suspicion_        = 0.0f;
-    sightLostTimer_   = 0.0f;
-    playerSeen_       = false;
+    playerPos_        = cfg::kF3StartPos;
+    moveDir_          = glm::vec2(0.0f);
+    facingDeg_        = 180.0f;
     caughtFlashTimer_ = cfg::kF3CaughtFlashTime;
-
-    aiming_       = false;
-    rockInFlight_ = false;
-    noiseTimer_   = 0.0f;
 
     resetGuard();
 }
 
-Camera StealthScene::makeCamera() const {
-    Camera camera(cfg::kF3CameraPos, cfg::kF3CameraTarget);
-    camera.setFovDegrees(cfg::kF3CameraFovDeg);
-    return camera;
-}
-
-// The mouse pixel is a ray from the camera; find where it hits the floor (y = 0)
-bool StealthScene::screenToFloor(const glm::vec2& screenPos,
-                                 glm::vec3& outFloor) const {
-    const float width  = static_cast<float>(ctx().framebufferWidth);
-    const float height = static_cast<float>(ctx().framebufferHeight);
-
-    const Camera camera = makeCamera();
-    const glm::mat4 view       = camera.view();
-    const glm::mat4 projection = camera.perspective(ctx().framebufferWidth,
-                                                    ctx().framebufferHeight);
-    const glm::vec4 viewport(0.0f, 0.0f, width, height);
-
-    const float x = screenPos.x;
-    const float y = height - screenPos.y;
-
-    const glm::vec3 nearPoint = glm::unProject(glm::vec3(x, y, 0.0f), view, projection, viewport);
-    const glm::vec3 farPoint  = glm::unProject(glm::vec3(x, y, 1.0f), view, projection, viewport);
-
-    const float rise = farPoint.y - nearPoint.y;
-    if (std::fabs(rise) < 1e-6f) {
-        return false;
-    }
-
-    const float t = -nearPoint.y / rise;
-    if (t < 0.0f) {
-        return false;
-    }
-
-    outFloor = nearPoint + (farPoint - nearPoint) * t;
-    outFloor.y = 0.0f;
-    return true;
-}
-
-void StealthScene::updateAim(const Input& input) {
-    glm::vec3 target(0.0f);
-    aimValid_ = screenToFloor(input.mousePosition(), target);
-
-    if (!aimValid_) {
-        return;
-    }
-
-    target = clampToRoom(target, cfg::kF3RockRadius * 2.0f);
-
-    const float distance = floorDistance(playerPos_, target);
-    if (distance > cfg::kF3RockThrowRange) {
-        target = playerPos_ + (target - playerPos_) * (cfg::kF3RockThrowRange / distance);
-    }
-
-    aimImpact_ = walkUntilWall(playerPos_, target, aimBlocked_);
-    aimImpact_.y = 0.0f;
-}
-
+// The rock flies straight ahead of Roary and lands at the first wall it hits
 void StealthScene::throwRock() {
-    if (rocksLeft_ <= 0 || rockInFlight_ || !aimValid_) {
+    if (rocksLeft_ <= 0) {
         return;
     }
-
     --rocksLeft_;
-    aiming_ = false;
 
-    rockFrom_     = playerPos_;
-    rockTo_       = aimImpact_;
-    rockElapsed_  = 0.0f;
-    rockInFlight_ = true;
+    const float facingRad = glm::radians(facingDeg_);
+    const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
+    const glm::vec3 target = clampToRoom(playerPos_ + forward * cfg::kF3RockThrowRange, 0.0f);
 
-    rockDuration_ = std::max(0.18f, floorDistance(rockFrom_, rockTo_) / cfg::kF3RockSpeed);
-
-    facingDeg_ = angleToward(rockFrom_, rockTo_);
-}
-
-void StealthScene::updateRock(float deltaTime) {
-    noiseTimer_ = std::max(0.0f, noiseTimer_ - deltaTime);
-
-    if (!rockInFlight_) {
-        return;
-    }
-
-    rockElapsed_ += deltaTime;
-
-    if (rockElapsed_ >= rockDuration_) {
-        rockInFlight_ = false;
-        raiseNoise(rockTo_);
-    }
-}
-
-void StealthScene::raiseNoise(const glm::vec3& position) {
-    noisePos_   = position;
-    noiseTimer_ = cfg::kF3NoiseDuration;
+    bool blocked = false;
+    const glm::vec3 landing = walkUntilWall(playerPos_, target, blocked);
 
     // Hearing ignores walls, so a rock through a doorway still distracts him
-    if (floorDistance(guardPos_, position) <= cfg::kF3NoiseRadius) {
+    if (floorDistance(guardPos_, landing) <= cfg::kF3NoiseRadius) {
+        // Remember where he was looking, unless he's already looking at a noise
+        if (!guardIsDistracted()) {
+            guardFacingBeforeAlert_ = guardFacingDeg_;
+        }
         guardAlertTimer_  = cfg::kF3GuardAlertTime;
-        guardAlertTarget_ = position;
+        guardAlertTarget_ = landing;
     }
 }
 
@@ -473,12 +338,13 @@ void StealthScene::update(float deltaTime) {
     movePlayer(deltaTime);
     collectNearbyItems();
     checkDoor();
-    updateRock(deltaTime);
     updateGuard(deltaTime);
-    playerSeen_ = guardCanSeePlayer();
-    updateSuspicion(deltaTime);
 
-    lockedFlashTimer_ = std::max(0.0f, lockedFlashTimer_ - deltaTime);
+    if (guardCanSeePlayer()) {
+        getCaught();
+    }
+
+    caughtFlashTimer_ = std::max(0.0f, caughtFlashTimer_ - deltaTime);
 }
 
 void StealthScene::render() {
@@ -496,21 +362,16 @@ void StealthScene::render() {
         cfg::kBgGlowRadius,
         0.10f);
 
-    const Camera camera = makeCamera();
+    Camera camera(cfg::kF3CameraPos, cfg::kF3CameraTarget);
+    camera.setFovDegrees(cfg::kF3CameraFovDeg);
     renderer.setCamera(camera.view(), camera.perspective(width, height));
 
     drawRoom();
     drawDoor();
     drawItems();
     drawGuard();
-    drawAlertMark();
     drawRoary();
-    drawRock();
-
     drawVisionCone();
-    drawNoise();
-    drawAimMarker();
-
     drawUi();
 }
 
@@ -539,7 +400,6 @@ void StealthScene::drawRoom() {
     drawWall(0.0f, -halfZ - thick * 0.5f, spanX, thick, height);
     drawWall(-halfX - thick * 0.5f, 0.0f, thick, spanZ, height);
     drawWall( halfX + thick * 0.5f, 0.0f, thick, spanZ, height);
-
     drawWall(0.0f, halfZ + thick * 0.5f, spanX, thick, cfg::kF3NearWallHeight);
 
     for (int i = 0; i < cfg::kF3InnerWallCount; ++i) {
@@ -549,6 +409,7 @@ void StealthScene::drawRoom() {
     }
 }
 
+// Red while locked, green once every paw is collected
 void StealthScene::drawDoor() {
     const glm::vec3 color = doorIsOpen() ? cfg::kF3DoorOpen : cfg::kF3DoorLocked;
 
@@ -557,7 +418,7 @@ void StealthScene::drawDoor() {
                   cfg::kF3DoorHeight * 0.5f,
                   cfg::kF3DoorZ),
         glm::vec3(cfg::kF3WallThick * 1.2f, cfg::kF3DoorHeight, cfg::kF3DoorWidth),
-        color, 1.0f, 0.5f);
+        color);
 }
 
 void StealthScene::drawItems() {
@@ -589,57 +450,23 @@ void StealthScene::drawGuard() {
                        cfg::kF3GuardHead);
 }
 
-void StealthScene::drawAlertMark() {
-    if (!guardIsDistracted()) {
-        return;
-    }
-
-    Renderer& renderer = ctx().renderer;
-
-    const float baseY = cfg::kF3GuardBodyHeight + cfg::kF3GuardHeadSize + cfg::kF3AlertMarkY;
-
-    renderer.drawBoxAt(glm::vec3(guardPos_.x, baseY + 0.68f, guardPos_.z),
-                       glm::vec3(0.20f, 0.70f, 0.20f),
-                       cfg::kF3AlertMark, 1.0f, 0.85f);
-
-    renderer.drawBoxAt(glm::vec3(guardPos_.x, baseY, guardPos_.z),
-                       glm::vec3(0.22f),
-                       cfg::kF3AlertMark, 1.0f, 0.85f);
-}
-
+// Tinted red for a moment after being caught
 void StealthScene::drawRoary() {
+    const float tint = (caughtFlashTimer_ > 0.0f) ? 0.6f : 0.0f;
+
     mascots::drawRoary(ctx().renderer, playerPos_,
                        mascots::kRoaryNaturalHeight * cfg::kF3PlayerScale,
-                       facingDeg_);
+                       facingDeg_, 0.0f, tint, cfg::kF3CaughtTint);
 }
 
-void StealthScene::drawRock() {
-    if (!rockInFlight_) {
-        return;
-    }
-
-    const float t = std::min(1.0f, rockElapsed_ / rockDuration_);
-    const glm::vec3 position = rockFrom_ + (rockTo_ - rockFrom_) * t;
-
-    ctx().renderer.drawSphereAt(glm::vec3(position.x, 0.5f, position.z),
-                                glm::vec3(cfg::kF3RockRadius * 2.0f),
-                                cfg::kF3RockColor);
-}
-
+// Cyan normally, amber while the guard is distracted by a rock
 void StealthScene::drawVisionCone() {
     Renderer& renderer = ctx().renderer;
 
-    const float range = cfg::kF3VisionRange;
-
+    const float range = visionRange();
     const float width = 2.0f * range * std::tan(glm::radians(cfg::kF3VisionHalfAngleDeg));
 
-    glm::vec3 coneColor = cfg::kF3ConeCalm;
-    if (playerSeen_) {
-        coneColor = cfg::kF3ConeAlert;
-    } else if (guardIsDistracted()) {
-        coneColor = cfg::kF3ConeAlerted;
-    }
-
+    const glm::vec3 coneColor = guardIsDistracted() ? cfg::kF3ConeAlerted : cfg::kF3ConeCalm;
     const glm::vec3 apex(guardPos_.x, cfg::kF3ConeApexY, guardPos_.z);
 
     renderer.setDepthWrite(false);
@@ -649,68 +476,8 @@ void StealthScene::drawVisionCone() {
     renderer.setDepthWrite(true);
 }
 
-void StealthScene::drawNoise() {
-    if (noiseTimer_ <= 0.0f) {
-        return;
-    }
-
-    Renderer& renderer = ctx().renderer;
-
-    renderer.setDepthWrite(false);
-    renderer.drawCylinderAt(glm::vec3(noisePos_.x, 0.04f, noisePos_.z),
-                            glm::vec3(cfg::kF3NoiseRadius * 2.0f, 0.02f,
-                                      cfg::kF3NoiseRadius * 2.0f),
-                            cfg::kF3NoiseColor, 0.16f, 1.0f);
-    renderer.setDepthWrite(true);
-}
-
-void StealthScene::drawAimMarker() {
-    if (!aiming_ || !aimValid_) {
-        return;
-    }
-
-    Renderer& renderer = ctx().renderer;
-
-    const glm::vec3 color = aimBlocked_ ? cfg::kF3MarkerBlocked : cfg::kF3MarkerOpen;
-
-    renderer.setDepthWrite(false);
-    renderer.drawCylinderAt(glm::vec3(aimImpact_.x, 0.03f, aimImpact_.z),
-                            glm::vec3(1.25f, 0.02f, 1.25f),
-                            color, 0.40f, 1.0f);
-    renderer.setDepthWrite(true);
-}
-
 float StealthScene::px(float designPixels) const {
     return designPixels * uiScale_;
-}
-
-void StealthScene::drawSuspicionMeter() {
-    TextRenderer& text = ctx().renderer.text();
-
-    const float centerX = static_cast<float>(ctx().framebufferWidth) * 0.5f;
-    const float top     = px(132.0f);
-
-    if (caughtFlashTimer_ > 0.0f) {
-        text.drawCentered("CAUGHT! BACK TO THE START", centerX, top,
-                          px(cfg::kFloorNameScale * 0.75f), cfg::kF3ConeAlert);
-        return;
-    }
-
-    if (suspicion_ <= 0.0f) {
-        return;
-    }
-
-    const float barWidth  = px(cfg::kF3MeterWidth);
-    const float barHeight = px(cfg::kF3MeterHeight);
-    const float barX      = centerX - barWidth * 0.5f;
-
-    text.fillRect(barX, top, barWidth, barHeight, cfg::kBgBottom, 0.80f);
-    text.fillRect(barX, top, barWidth * std::min(suspicion_, 1.0f), barHeight,
-                  cfg::kF3MeterFill, 0.95f);
-
-    text.drawCentered(playerSeen_ ? "SPOTTED" : "LOSING INTEREST",
-                      centerX, top + barHeight + px(6.0f),
-                      px(cfg::kHintScale), cfg::kTextPrimary);
 }
 
 void StealthScene::drawUi() {
@@ -734,22 +501,7 @@ void StealthScene::drawUi() {
                   + "/" + std::to_string(cfg::kF3RockCount),
               px(24.0f), px(54.0f), hint, cfg::kTextPrimary);
 
-    drawSuspicionMeter();
-
-    if (lockedFlashTimer_ > 0.0f) {
-        text.drawCentered("THE DOOR IS LOCKED - FIND ALL THE PAWS",
-                          centerX, bottom - px(160.0f), hint, cfg::kTextLocked);
-    } else if (doorIsOpen()) {
-        text.drawCentered("THE DOOR IS OPEN - GET OUT",
-                          centerX, bottom - px(160.0f), hint, cfg::kTextComplete);
-    }
-
-    if (aiming_) {
-        text.drawCentered("CLICK TO THROW     E TO CANCEL",
-                          centerX, bottom - px(126.0f), hint, cfg::kTextPrimary);
-    }
-
-    text.drawCentered("WASD - MOVE     SHIFT - SNEAK     E - AIM A ROCK",
+    text.drawCentered("WASD - MOVE     SHIFT - SNEAK     E - THROW A ROCK",
                       centerX, bottom - px(90.0f), hint, cfg::kTextPrimary);
     text.drawCentered("ESC - BACK TO THE TOWER     C - DEBUG COMPLETE",
                       centerX, bottom - px(54.0f), hint, cfg::kTextDim);
