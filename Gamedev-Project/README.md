@@ -4,9 +4,9 @@ CAP 4052 group project.
 
 ## Team Members
 
-Names: Pedro Re, Remberto Tejada
+Names: Pedro Re, Remberto Silva
 
-Panther IDs:
+Panther IDs: 6409617
 
 ## Approved Concept
 
@@ -125,7 +125,7 @@ Throwable rocks: a rock flies straight ahead of Roary and lands at its full rang
 
 Noise distraction: a rock landing near the guard makes him look at it for a few seconds, then turn back and carry on along his route.
 
-Feedback is kept minimal. The cone turns amber while the guard is distracted, the door turns green when it opens, and Roary flashes red when caught.
+Feedback minimal. The cone turns amber while the guard is distracted, the door turns green when it opens, and Roary flashes red when caught.
 
 ### Top Floor: Rival Showdown
 
