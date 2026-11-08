@@ -1,3 +1,9 @@
+// Runs the tunnel: constant forward speed, strafing across the current face,
+// jumping, and the handoff onto a neighbouring face when the player leaves the
+// edge of the one they are on. It reads the segment table from TunnelLevel.h to
+// decide which tiles are solid, and eases the camera's roll toward the current
+// face each frame so the world appears to rotate around the player.
+
 #include "scenes/TunnelScene.h"
 
 #include "core/Camera.h"
@@ -21,8 +27,6 @@
 #include <string>
 
 namespace {
-
-// The tunnel runs along +Z, so that is "forward" for everything below.
 constexpr glm::vec3 kForward{0.0f, 0.0f, 1.0f};
 
 float moveToward(float value, float target, float maxDelta) {
@@ -30,7 +34,6 @@ float moveToward(float value, float target, float maxDelta) {
     return value + (target > value ? maxDelta : -maxDelta);
 }
 
-// Shortest signed difference between two angles, in degrees.
 float angleDifference(float from, float to) {
     float difference = to - from;
     while (difference > 180.0f)  difference -= 360.0f;
@@ -38,25 +41,14 @@ float angleDifference(float from, float to) {
     return difference;
 }
 
-} // namespace
-
-//=============================================================================
-// Face geometry
-//
-// Walking off the right-hand edge of a face takes you to face + 1, arriving at
-// its LEFT edge. That single rule is what sends you round the tunnel, and the
-// corner pairings in TunnelLevel.h fall straight out of it.
-//=============================================================================
+}
 
 glm::vec3 TunnelScene::faceDown(int face) {
-    // Ordered so that face + 1 is always the face you reach by strafing
-    // RIGHT on screen. Getting this order wrong is what made the controls
-    // feel mirrored.
     switch (face & 3) {
-        case 0:  return { 0.0f, -1.0f, 0.0f};   // floor
-        case 1:  return {-1.0f,  0.0f, 0.0f};   // the wall on your right
-        case 2:  return { 0.0f,  1.0f, 0.0f};   // ceiling
-        default: return { 1.0f,  0.0f, 0.0f};   // the wall on your left
+        case 0:  return { 0.0f, -1.0f, 0.0f};
+        case 1:  return {-1.0f,  0.0f, 0.0f};
+        case 2:  return { 0.0f,  1.0f, 0.0f};
+        default: return { 1.0f,  0.0f, 0.0f};
     }
 }
 
@@ -65,10 +57,6 @@ glm::vec3 TunnelScene::faceUp(int face) {
 }
 
 glm::vec3 TunnelScene::faceRight(int face) {
-    // right = forward x up. With the camera looking down +Z this is the
-    // direction that appears to the right ON SCREEN, which is what the
-    // strafe keys have to agree with. The other way round (up x forward)
-    // points the opposite way and the controls come out mirrored.
     return glm::cross(kForward, faceUp(face));
 }
 
@@ -93,10 +81,6 @@ bool TunnelScene::tileUnderFoot() const {
     return level2::hasTile(currentSegment(), face_, currentLane());
 }
 
-//=============================================================================
-// Lifecycle
-//=============================================================================
-
 bool TunnelScene::init() {
     face_ = 0;
     lateral_ = 0.0f;
@@ -117,9 +101,6 @@ bool TunnelScene::init() {
 }
 
 void TunnelScene::restartLevel() {
-    // Miss a jump and the whole run starts again, the way the games this is
-    // based on do it. The tunnel is short enough that a restart is a setback
-    // rather than a punishment, and it keeps the pressure on.
     face_ = 0;
     lateral_ = 0.0f;
     height_ = 0.0f;
@@ -131,10 +112,6 @@ void TunnelScene::restartLevel() {
     rollDegrees_ = 0.0f;
     ++wipeouts_;
 }
-
-//=============================================================================
-// Input
-//=============================================================================
 
 void TunnelScene::handleInput(const Input& input) {
     if (input.wasPressed(GLFW_KEY_ESCAPE)) {
@@ -166,10 +143,6 @@ void TunnelScene::handleInput(const Input& input) {
     }
 }
 
-//=============================================================================
-// Update
-//=============================================================================
-
 void TunnelScene::update(float deltaTime) {
     elapsedTime_ += deltaTime;
 
@@ -192,7 +165,6 @@ void TunnelScene::update(float deltaTime) {
 void TunnelScene::updateRun(float deltaTime) {
     using namespace cfg::tunnel;
 
-    // --- forward: you never control this, it only gets faster --------------
     forwardSpeed_ = std::min(kMaxSpeed, forwardSpeed_ + kSpeedRamp * deltaTime);
     distance_ += forwardSpeed_ * deltaTime;
 
@@ -202,15 +174,10 @@ void TunnelScene::updateRun(float deltaTime) {
         return;
     }
 
-    // --- strafing across the face ------------------------------------------
     const float targetLateral = strafeInput_ * kStrafeSpeed;
     lateralVelocity_ = moveToward(lateralVelocity_, targetLateral, kStrafeAccel * deltaTime);
     lateral_ += lateralVelocity_ * deltaTime;
 
-    // --- rounding a corner ---------------------------------------------------
-    // Running past the edge of a face puts you on the neighbour, arriving at
-    // its opposite edge. Carrying the overshoot across means no stutter at the
-    // seam, and because the face is an integer this can never drift.
     const float half = halfSide();
     if (lateral_ > half) {
         face_ = (face_ + 1) & 3;
@@ -220,7 +187,6 @@ void TunnelScene::updateRun(float deltaTime) {
         lateral_ = half + (lateral_ + half);
     }
 
-    // --- jumping -------------------------------------------------------------
     if (jumpQueued_ && (grounded_ || coyoteTimer_ > 0.0f)) {
         upVelocity_ = jumpSpeed();
         grounded_ = false;
@@ -228,12 +194,10 @@ void TunnelScene::updateRun(float deltaTime) {
     }
     jumpQueued_ = false;
 
-    // --- gravity, pulling toward whichever face is currently "down" --------
     const float gravityScale = (upVelocity_ < 0.0f) ? kFallGravityMultiplier : 1.0f;
     upVelocity_ -= gravity() * gravityScale * deltaTime;
     height_ += upVelocity_ * deltaTime;
 
-    // --- landing --------------------------------------------------------------
     const bool wasGrounded = grounded_;
     if (height_ <= 0.0f && upVelocity_ <= 0.0f && tileUnderFoot()) {
         height_ = 0.0f;
@@ -242,7 +206,6 @@ void TunnelScene::updateRun(float deltaTime) {
     } else if (height_ > 0.0f) {
         grounded_ = false;
     } else {
-        // Below the surface with no tile beneath: dropping through a hole.
         grounded_ = false;
     }
 
@@ -252,7 +215,6 @@ void TunnelScene::updateRun(float deltaTime) {
         coyoteTimer_ = std::max(0.0f, coyoteTimer_ - deltaTime);
     }
 
-    // --- missed it ------------------------------------------------------------
     if (height_ < -kFallLimit) {
         restartLevel();
         return;
@@ -261,8 +223,6 @@ void TunnelScene::updateRun(float deltaTime) {
 }
 
 void TunnelScene::updateRoll(float deltaTime) {
-    // The view chases the face you are on. This is the only part of the
-    // orientation that interpolates; the face itself is an integer.
     const float target = static_cast<float>(face_) * 90.0f;
     const float difference = angleDifference(rollDegrees_, target);
     const float step = cfg::tunnel::kRollSpeed * deltaTime;
@@ -274,10 +234,6 @@ void TunnelScene::updateRoll(float deltaTime) {
     }
 }
 
-//=============================================================================
-// Render
-//=============================================================================
-
 void TunnelScene::render() {
     Renderer& renderer = ctx().renderer;
     const int width = ctx().framebufferWidth;
@@ -288,10 +244,6 @@ void TunnelScene::render() {
                             glm::vec3(0.0f, 0.0f, 0.0f),
                             cfg::kF2RimGlow, glm::vec2(0.0f, 0.0f), 0.9f, 0.12f);
 
-    // The camera's up vector is rolled to match the face, which is what makes
-    // the tunnel appear to rotate around the player rather than the other way.
-    // Rolling by +90 degrees per face must land on faceUp(1), faceUp(2), ...
-    // in that order, which is what this sign gives.
     const float roll = glm::radians(rollDegrees_);
     const glm::vec3 up(std::sin(roll), std::cos(roll), 0.0f);
 
@@ -304,7 +256,6 @@ void TunnelScene::render() {
 
     drawTunnel();
 
-    // Roary, rolled onto whichever surface he is running along.
     mascots::drawRoary(renderer, player, cfg::tunnel::kPlayerSize.y, 0.0f, -rollDegrees_);
 
     drawHud();
@@ -319,8 +270,6 @@ void TunnelScene::drawTunnel() {
     const int last = std::min(level2::kSegmentCount - 1, here + kDrawDistance);
 
     for (int segment = first; segment <= last; ++segment) {
-        // Tiles dim with distance so the tunnel recedes into the dark rather
-        // than ending in a hard edge.
         const float away = static_cast<float>(segment - here) / static_cast<float>(kDrawDistance);
         const float fade = std::clamp(1.0f - away * away, 0.08f, 1.0f);
 
@@ -346,16 +295,10 @@ void TunnelScene::drawTunnel() {
                     ? glm::vec3(laneWidth(), kTileThickness, kSegmentLength)
                     : glm::vec3(kTileThickness, laneWidth(), kSegmentLength);
 
-                // Alternate the two accent colors so the tiles have a rhythm
-                // you can read at speed.
                 const glm::vec3 accent = ((segment + lane) % 2 == 0) ? kTileTopA : kTileTopB;
 
                 renderer.drawBoxAt(center, size, kTileBody * fade);
 
-                // A bright inner face: the surface you actually run on. It is
-                // pushed slightly PROUD of the tile rather than flush with it -
-                // flush would make the two coplanar and they would z-fight into
-                // a mess of stripes at distance.
                 const glm::vec3 capCenter = center - down * (kTileThickness * 0.54f);
                 const glm::vec3 capSize = horizontal
                     ? glm::vec3(laneWidth() * 0.94f, kTileThickness * 0.16f, kSegmentLength * 0.94f)
@@ -366,7 +309,6 @@ void TunnelScene::drawTunnel() {
         }
     }
 
-    // The finish: a ring of light across the end of the tunnel.
     const float goalZ = static_cast<float>(level2::kSegmentCount) * kSegmentLength;
     if (here > level2::kSegmentCount - kDrawDistance) {
         const float pulse = 0.6f + 0.4f * std::sin(elapsedTime_ * 4.0f);
@@ -397,7 +339,6 @@ void TunnelScene::drawHud() {
     text.drawCentered(info.description, centerX, px(72.0f),
                       px(cfg::kDescriptionScale), cfg::kTextDim);
 
-    // Progress bar: the clearest way to show how far down a tunnel you are.
     const float total = static_cast<float>(level2::kSegmentCount) * cfg::tunnel::kSegmentLength;
     const float progress = std::clamp(distance_ / total, 0.0f, 1.0f);
 

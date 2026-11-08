@@ -1,3 +1,8 @@
+// Implements the progress state: a new game starts with only the bottom floor
+// unlocked, and marking a floor completed also unlocks the one above it. Every
+// floor index is bounds-checked, so a bad index is ignored rather than reading
+// out of range.
+
 #include "core/GameProgress.h"
 
 #include <iostream>
@@ -15,7 +20,7 @@ void GameProgress::reset() {
         floor.unlocked = false;
         floor.completed = false;
     }
-    // The bottom floor is always available at the start of a new game.
+
     floors_[0].unlocked = true;
 }
 
@@ -34,8 +39,6 @@ void GameProgress::markCompleted(int floorIndex) {
 
     floors_[static_cast<std::size_t>(floorIndex)].completed = true;
 
-    // Beating a floor opens the next one up. The top floor has nothing above
-    // it, so the bounds check quietly handles that case.
     const int nextFloor = floorIndex + 1;
     if (isValidIndex(nextFloor)) {
         floors_[static_cast<std::size_t>(nextFloor)].unlocked = true;

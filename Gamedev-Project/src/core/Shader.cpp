@@ -1,3 +1,7 @@
+// Compiles each shader stage, links the two into a program, and prints the GL
+// error log to stderr if either step fails. The uniform setters look a name up in
+// a cache and only query its location the first time it is used.
+
 #include "core/Shader.h"
 
 #include <glad/glad.h>
@@ -6,8 +10,6 @@
 #include <iostream>
 
 namespace {
-
-// Compiles one shader stage. Returns 0 on failure after printing the log.
 unsigned int compileStage(unsigned int type, const char* source) {
     const unsigned int shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -26,7 +28,7 @@ unsigned int compileStage(unsigned int type, const char* source) {
     return shader;
 }
 
-} // namespace
+}
 
 Shader::~Shader() {
     destroy();
@@ -49,7 +51,6 @@ bool Shader::build(const char* vertexSource, const char* fragmentSource) {
     glAttachShader(program_, fs);
     glLinkProgram(program_);
 
-    // The stages are baked into the program now; the objects can go away.
     glDeleteShader(vs);
     glDeleteShader(fs);
 
@@ -80,7 +81,6 @@ void Shader::destroy() {
 }
 
 int Shader::location(const char* name) {
-    // Look in the cache first; only ask the driver once per uniform name.
     const auto it = uniformCache_.find(name);
     if (it != uniformCache_.end()) {
         return it->second;

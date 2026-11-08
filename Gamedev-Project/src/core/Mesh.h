@@ -1,12 +1,8 @@
 #pragma once
-//=============================================================================
-// Mesh - a thin wrapper around one VAO/VBO/EBO triple plus factory functions
-// for the handful of primitive shapes the whole game is built from.
-//
-// Every placeholder object in the game is a box or a pyramid. When real models
-// arrive, add a loader that fills the same Vertex list and nothing else has to
-// change.
-//=============================================================================
+
+// A wrapper around one VAO/VBO/EBO triple, plus builders for the handful of
+// primitives the whole game is drawn from: box, pyramid, cylinder, sphere and a
+// fullscreen quad. A mesh owns GPU resources, so it can be moved but not copied.
 
 #include <glm/vec3.hpp>
 #include <vector>
@@ -21,42 +17,25 @@ public:
     Mesh() = default;
     ~Mesh();
 
-    // Meshes own GL resources, so they must not be copied. Moving is allowed
-    // so they can live in containers.
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
     Mesh(Mesh&& other) noexcept;
     Mesh& operator=(Mesh&& other) noexcept;
 
-    // Uploads geometry to the GPU.
     void upload(const std::vector<Vertex>& vertices,
                 const std::vector<unsigned int>& indices);
 
     void draw() const;
     void destroy();
 
-    // --- primitive builders --------------------------------------------------
-    // A unit cube centered on the origin, spanning -0.5..0.5 on every axis.
-    // Scale it with a model matrix to get any box you need.
     void buildBox();
 
-    // A square-based pyramid: base at y = -0.5 spanning -0.5..0.5 in X and Z,
-    // apex at (0, +0.5, 0). Used for ears, horns, beaks and roof spikes.
     void buildPyramid();
 
-    // A cylinder standing on the Y axis: radius 0.5, height 1, centered on the
-    // origin, so scaling by (diameter, height, diameter) gives any size you
-    // want. The curved side uses smooth radial normals, which is what makes
-    // the tower read as round rather than faceted.
     void buildCylinder(int segments = 24);
 
-    // A sphere of radius 0.5 centered on the origin, with smooth normals.
-    // Squash or stretch it with a model matrix to get the rounded, plush
-    // shapes the mascot costumes are made of.
     void buildSphere(int segments = 20, int rings = 12);
 
-    // A screen-filling quad in normalized device coordinates, for the
-    // background gradient. Has no meaningful normals.
     void buildFullscreenQuad();
 
 private:

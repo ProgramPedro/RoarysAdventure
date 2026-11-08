@@ -1,3 +1,8 @@
+// Implements the camera: builds the view matrix with glm::lookAt and the
+// projection from the current aspect ratio, guarding against a zero height when
+// the window is minimized. Also implements worldToScreen, which projects a world
+// point into framebuffer pixels and reports whether it is in front of the camera.
+
 #include "core/Camera.h"
 
 #include "core/Config.h"
@@ -15,7 +20,6 @@ glm::mat4 Camera::view() const {
 }
 
 glm::mat4 Camera::perspective(int framebufferWidth, int framebufferHeight) const {
-    // Guard against a zero height when the window is minimized.
     const float safeHeight = static_cast<float>(std::max(framebufferHeight, 1));
     const float aspect = static_cast<float>(std::max(framebufferWidth, 1)) / safeHeight;
     return glm::perspective(glm::radians(fovDegrees_), aspect,
@@ -28,18 +32,14 @@ bool worldToScreen(const glm::vec3& worldPos,
                    glm::vec3& outScreen) {
     const glm::vec4 clip = viewProjection * glm::vec4(worldPos, 1.0f);
 
-    // w <= 0 means the point is at or behind the camera plane; dividing by it
-    // would give us garbage coordinates.
     if (clip.w <= 0.0001f) {
         return false;
     }
 
-    // Clip space -> normalized device coordinates (-1..1 on each axis).
     const glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
-    // NDC -> pixels. NDC y points up, screen y points down, hence the flip.
     outScreen.x = (ndc.x * 0.5f + 0.5f) * static_cast<float>(framebufferWidth);
     outScreen.y = (1.0f - (ndc.y * 0.5f + 0.5f)) * static_cast<float>(framebufferHeight);
-    outScreen.z = ndc.z; // depth, handy for sorting if we ever need it
+    outScreen.z = ndc.z;
     return true;
 }

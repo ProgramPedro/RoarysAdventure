@@ -1,3 +1,9 @@
+// Draws the round tower, the lift and each floor's diorama, dimming locked floors
+// and marking them with a padlock, and runs the menu on top of it. Moving the
+// selection animates Roary's lift between floors, and mouse hovering and clicking
+// are resolved by projecting each floor to the screen and testing the cursor
+// against it.
+
 #include "scenes/LevelSelectScene.h"
 
 #include "core/Camera.h"
@@ -17,36 +23,24 @@
 #include <string>
 
 namespace {
-
-// The tower is round, so one radius replaces the old width/depth pair.
 constexpr float kRadius = cfg::kTowerRadius;
 
-// Where the lock icon floats inside the open front of a floor.
 constexpr float kLockZ = kRadius * 0.55f;
 
-// Converts an angle measured from +Z (toward the camera) around toward +X into
-// a point on the tower's circle. Rotating a box by that same angle about Y
-// makes its front face point outward, which is how the wall segments are laid
-// out below.
 glm::vec3 pointOnCircle(float degrees, float radius, float y) {
     const float radians = glm::radians(degrees);
     return glm::vec3(std::sin(radians) * radius, y, std::cos(radians) * radius);
 }
 
-// Draws a stretch of curved wall as a ring of flat segments, leaving
-// `openingDegrees` open at the front so you can see into the room.
 void drawWallArc(Renderer& renderer, float centerY, float height, float radius,
                  float thickness, const glm::vec3& color, int segments,
                  float openingDegrees) {
     const float covered = 360.0f - openingDegrees;
     const float step = covered / static_cast<float>(segments);
 
-    // Each segment is a flat chord across its slice of the circle. The 1.12
-    // factor widens them slightly so neighbours overlap and no seams show.
     const float width = 2.0f * radius * std::sin(glm::radians(step * 0.5f)) * 1.12f;
 
     for (int i = 0; i < segments; ++i) {
-        // Start at the edge of the opening and sweep around the back.
         const float angle = openingDegrees * 0.5f
                           + step * (static_cast<float>(i) + 0.5f);
 
@@ -58,7 +52,6 @@ void drawWallArc(Renderer& renderer, float centerY, float height, float radius,
     }
 }
 
-// The blocks along the top of the parapet that make it read as a castle.
 void drawMerlons(Renderer& renderer, float y, float radius,
                  const glm::vec3& color, int count, float openingDegrees) {
     const float covered = 360.0f - openingDegrees;
@@ -77,8 +70,6 @@ void drawMerlons(Renderer& renderer, float y, float radius,
     }
 }
 
-// A thin ring of blocks all the way around the tower, used to highlight the
-// selected floor. A rectangle would look wrong on a round tower.
 void drawRing(Renderer& renderer, float y, float radius, float thickness,
               const glm::vec3& color, float alpha) {
     constexpr int kRingSegments = 30;
@@ -95,30 +86,22 @@ void drawRing(Renderer& renderer, float y, float radius, float thickness,
     }
 }
 
-// Builds a beam / limb that hangs from a pivot point and rotates about it,
-// rather than about its own center. Used for searchlights and horns.
 glm::mat4 hangingTransform(const glm::vec3& pivot, const glm::vec3& size,
                            float rollDegrees) {
     glm::mat4 model(1.0f);
     model = glm::translate(model, pivot);
     model = glm::rotate(model, glm::radians(rollDegrees), glm::vec3(0, 0, 1));
-    // Shift down by half the length so the TOP of the shape sits at the pivot.
+
     model = glm::translate(model, glm::vec3(0.0f, -size.y * 0.5f, 0.0f));
     model = glm::scale(model, size);
     return model;
 }
 
-} // namespace
-
-//=============================================================================
-// Lifecycle
-//=============================================================================
+}
 
 bool LevelSelectScene::init() {
     selectedFloor_ = 0;
 
-    // Open on the highest floor the player has actually unlocked, so returning
-    // to the menu after beating a floor puts the cursor where they left off.
     for (int floor = cfg::kFloorCount - 1; floor >= 0; --floor) {
         if (ctx().progress.isUnlocked(floor)) {
             selectedFloor_ = floor;
@@ -126,7 +109,6 @@ bool LevelSelectScene::init() {
         }
     }
 
-    // Start Roary already at the selected floor instead of sliding in.
     roaryY_ = cfg::floorCenterY(selectedFloor_);
     elapsedTime_ = 0.0f;
     lockedFlashTimer_ = 0.0f;
@@ -140,8 +122,6 @@ float LevelSelectScene::px(float designPixels) const {
 }
 
 float LevelSelectScene::floorPickHeight(int floorIndex) const {
-    // Enclosed floors are as tall as the room. The open castle top only counts
-    // up to the battlements plus the figures standing on it.
     const bool isTopFloor = (floorIndex == cfg::kFloorCount - 1);
     return isTopFloor ? cfg::kTopFloorPickHeight : cfg::kFloorHeight;
 }
@@ -151,44 +131,29 @@ glm::vec3 LevelSelectScene::shade(const glm::vec3& color, bool locked) const {
     return glm::mix(color, cfg::kLockedGrey, cfg::kLockedFade);
 }
 
-//=============================================================================
-// Input
-//=============================================================================
-
 void LevelSelectScene::moveSelection(int delta) {
     const int next = selectedFloor_ + delta;
 
-    // Clamp instead of wrapping: the tower has a top and a bottom, and running
-    // off either end should just stop.
     if (next < 0 || next >= cfg::kFloorCount) {
         return;
     }
     selectedFloor_ = next;
 
-    // Any successful move clears a pending LOCKED flash.
     lockedFlashTimer_ = 0.0f;
 }
 
 void LevelSelectScene::tryEnterSelectedFloor() {
     if (!ctx().progress.isUnlocked(selectedFloor_)) {
-        // Flash the LOCKED label rather than silently ignoring the press, so
-        // the player knows the input registered.
         lockedFlashTimer_ = 0.75f;
         return;
     }
 
-    // Only a REQUEST: this scene keeps running for the rest of this frame and
-    // SceneManager swaps it out once the frame has been presented.
     ctx().manager.requestScene(sceneIdForFloor(selectedFloor_));
 }
 
 void LevelSelectScene::handleInput(const Input& input) {
-    // The screen rectangles are needed for mouse hit-testing, and they depend
-    // on the camera, so refresh them before reading the mouse.
     refreshFloorScreenRects();
 
-    // --- keyboard: move up and down the tower --------------------------------
-    // Up means "a higher floor", which is a HIGHER index.
     if (input.wasPressed(GLFW_KEY_W) || input.wasPressed(GLFW_KEY_UP)) {
         moveSelection(+1);
     }
@@ -196,10 +161,6 @@ void LevelSelectScene::handleInput(const Input& input) {
         moveSelection(-1);
     }
 
-    // --- mouse: hover selects, click enters ----------------------------------
-    // Hover only takes over once the mouse has actually MOVED. Without this,
-    // a cursor that happens to be resting over a floor would keep yanking the
-    // selection back every frame while the player is using the keyboard.
     const glm::vec2 mousePosition = input.mousePosition();
     const glm::vec2 mouseDelta = mousePosition - lastMousePosition_;
     const bool mouseMoved = std::abs(mouseDelta.x) + std::abs(mouseDelta.y) > 1.0f;
@@ -210,14 +171,13 @@ void LevelSelectScene::handleInput(const Input& input) {
         selectedFloor_ = hoveredFloor_;
         lockedFlashTimer_ = 0.0f;
     }
-    // A click always works, moved or not.
+
     if (input.wasMouseClicked() && hoveredFloor_ >= 0) {
         selectedFloor_ = hoveredFloor_;
         tryEnterSelectedFloor();
         return;
     }
 
-    // --- confirm / quit ------------------------------------------------------
     if (input.wasPressed(GLFW_KEY_ENTER) || input.wasPressed(GLFW_KEY_SPACE)) {
         tryEnterSelectedFloor();
         return;
@@ -228,15 +188,10 @@ void LevelSelectScene::handleInput(const Input& input) {
         return;
     }
 
-    // --- debug ---------------------------------------------------------------
     if (input.wasPressed(GLFW_KEY_U)) {
         ctx().progress.unlockAll();
     }
 }
-
-//=============================================================================
-// Update
-//=============================================================================
 
 void LevelSelectScene::update(float deltaTime) {
     elapsedTime_ += deltaTime;
@@ -245,17 +200,10 @@ void LevelSelectScene::update(float deltaTime) {
         lockedFlashTimer_ = std::max(0.0f, lockedFlashTimer_ - deltaTime);
     }
 
-    // Ease Roary toward the selected floor. The 1 - exp(-k*dt) form gives a
-    // smooth slide that behaves the same at any frame rate, unlike a plain
-    // lerp by a fixed fraction.
     const float targetY = cfg::floorCenterY(selectedFloor_);
     const float blend = 1.0f - std::exp(-cfg::kRoaryMoveSpeed * deltaTime);
     roaryY_ += (targetY - roaryY_) * blend;
 }
-
-//=============================================================================
-// Screen-space helpers (mouse picking and floor labels)
-//=============================================================================
 
 void LevelSelectScene::refreshFloorScreenRects() {
     const glm::mat4& viewProjection = ctx().renderer.viewProjection();
@@ -263,14 +211,9 @@ void LevelSelectScene::refreshFloorScreenRects() {
     const int height = ctx().framebufferHeight;
 
     for (int floor = 0; floor < cfg::kFloorCount; ++floor) {
-        // Use the floor's VISIBLE height. The top floor is open, so its full
-        // floor height would let you select it by pointing at empty sky.
         const float bottomY = cfg::floorCenterY(floor) - cfg::kFloorHeight * 0.5f;
         const float topY = bottomY + floorPickHeight(floor);
 
-        // Project the eight corners of the box that encloses this floor's drum
-        // and take the extremes. That gives a screen rectangle which still
-        // fits correctly even though the camera views the tower at an angle.
         float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
         bool anyVisible = false;
 
@@ -294,7 +237,7 @@ void LevelSelectScene::refreshFloorScreenRects() {
 
         floorScreenRects_[static_cast<std::size_t>(floor)] = anyVisible
             ? glm::vec4(minX, minY, maxX, maxY)
-            : glm::vec4(0.0f);  // off screen: an empty rect never gets hit
+            : glm::vec4(0.0f);
     }
 }
 
@@ -302,7 +245,7 @@ int LevelSelectScene::floorUnderMouse(const glm::vec2& mousePosition) const {
     for (int floor = 0; floor < cfg::kFloorCount; ++floor) {
         const glm::vec4& rect = floorScreenRects_[static_cast<std::size_t>(floor)];
         if (rect.z <= rect.x || rect.w <= rect.y) {
-            continue;  // empty / off-screen
+            continue;
         }
         if (mousePosition.x >= rect.x && mousePosition.x <= rect.z &&
             mousePosition.y >= rect.y && mousePosition.y <= rect.w) {
@@ -312,10 +255,6 @@ int LevelSelectScene::floorUnderMouse(const glm::vec2& mousePosition) const {
     return -1;
 }
 
-//=============================================================================
-// Render
-//=============================================================================
-
 void LevelSelectScene::render() {
     Renderer& renderer = ctx().renderer;
     const int width = ctx().framebufferWidth;
@@ -323,13 +262,10 @@ void LevelSelectScene::render() {
 
     uiScale_ = static_cast<float>(height) / cfg::kUiReferenceHeight;
 
-    // --- 1. the FIU blue-and-gold backdrop -----------------------------------
     renderer.drawBackground(cfg::kBgTop, cfg::kBgBottom, cfg::kBgGlow,
                             cfg::kBgGlowPos, cfg::kBgGlowRadius,
                             cfg::kBgGlowStrength);
 
-    // --- 2. camera ------------------------------------------------------------
-    // A very slow drift keeps the menu from looking like a still image.
     const float sway = std::sin(elapsedTime_ * cfg::kCameraSwaySpeed)
                      * cfg::kCameraSwayAmount;
     glm::vec3 cameraPosition = cfg::kMenuCameraPos;
@@ -341,25 +277,20 @@ void LevelSelectScene::render() {
     camera.setFovDegrees(cfg::kMenuCameraFovDeg);
     renderer.setCamera(camera.view(), camera.perspective(width, height));
 
-    // --- 3. the tower and Roary ----------------------------------------------
     drawTower();
     drawRoary();
 
-    // --- 4. the text and panels on top ---------------------------------------
     drawUi();
 }
 
 void LevelSelectScene::drawTower() {
     Renderer& renderer = ctx().renderer;
 
-    // Round foundation the tower stands on.
     renderer.drawCylinderAt(glm::vec3(0.0f, cfg::kTowerBaseY - 0.55f, 0.0f),
                             glm::vec3((kRadius + 0.75f) * 2.0f, 1.1f,
                                       (kRadius + 0.75f) * 2.0f),
                             cfg::kTowerBase);
 
-    // Each floor: the stone shell first, then the themed contents inside it,
-    // then the lock icon or the selection ring.
     for (int floor = 0; floor < cfg::kFloorCount; ++floor) {
         drawFloorShell(floor);
         drawFloorProps(floor);
@@ -372,8 +303,6 @@ void LevelSelectScene::drawTower() {
         }
     }
 
-    // There is no roof: the tower ends in the open battlements drawn as part
-    // of the top floor's shell.
 }
 
 void LevelSelectScene::drawFloorShell(int floorIndex) {
@@ -385,8 +314,6 @@ void LevelSelectScene::drawFloorShell(int floorIndex) {
     const float halfHeight = cfg::kFloorHeight * 0.5f;
     const float floorY = centerY - halfHeight;
 
-    // The curved back wall carries each floor's theme color, so the room
-    // already reads as "platformer" or "tunnel" behind the props.
     glm::vec3 wallColor = cfg::kTowerStone;
     switch (floorIndex) {
         case 0: wallColor = cfg::kF1Wall; break;
@@ -399,15 +326,11 @@ void LevelSelectScene::drawFloorShell(int floorIndex) {
     const float discDiameter = (kRadius + cfg::kSlabOverhang) * 2.0f;
     const glm::vec3 stone = shade(cfg::kTowerStone, locked);
 
-    // Every floor stands on a round disc.
     renderer.drawCylinderAt(glm::vec3(0.0f, floorY, 0.0f),
                             glm::vec3(discDiameter, cfg::kSlabThickness, discDiameter),
                             stone);
 
     if (isTopFloor) {
-        // --- the open castle top -------------------------------------------
-        // No ceiling and no full-height wall: just a low parapet ringed with
-        // battlements, so the boss fight happens under open sky.
         const float parapetBase = floorY + cfg::kSlabThickness * 0.5f;
 
         drawWallArc(renderer, parapetBase + cfg::kParapetHeight * 0.5f,
@@ -422,16 +345,13 @@ void LevelSelectScene::drawFloorShell(int floorIndex) {
         return;
     }
 
-    // --- an enclosed round room ---------------------------------------------
     drawWallArc(renderer, centerY, cfg::kFloorHeight, kRadius, cfg::kWallThickness,
                 shade(wallColor, locked), cfg::kWallSegments, cfg::kWallOpeningDegrees);
 
-    // Ceiling disc.
     renderer.drawCylinderAt(glm::vec3(0.0f, centerY + halfHeight, 0.0f),
                             glm::vec3(discDiameter, cfg::kSlabThickness, discDiameter),
                             stone);
 
-    // Two pillars at the edges of the opening, framing the view inside.
     for (int side = 0; side < 2; ++side) {
         const float angle = (side == 0 ? -1.0f : 1.0f) * cfg::kWallOpeningDegrees * 0.5f;
         renderer.drawBox(
@@ -456,13 +376,9 @@ void LevelSelectScene::drawFloorProps(int floorIndex) {
     }
 }
 
-//-----------------------------------------------------------------------------
-// FLOOR 1 - Mario-style platformer: bright blocks and a spinning coin.
-//-----------------------------------------------------------------------------
 void LevelSelectScene::drawPlatformerProps(float centerY, bool locked) {
     Renderer& renderer = ctx().renderer;
 
-    // Platforms at staggered heights, reading as a little jumping route.
     struct Platform { float x; float y; glm::vec3 color; };
     const Platform platforms[] = {
         {-2.10f, -0.58f, cfg::kF1BlockWarm},
@@ -477,8 +393,6 @@ void LevelSelectScene::drawPlatformerProps(float centerY, bool locked) {
             shade(platform.color, locked));
     }
 
-    // A coin spinning over the last platform. Turning it 45 degrees on Y makes
-    // the cube read as a diamond, and the bob gives the floor some life.
     const float bob = std::sin(elapsedTime_ * 2.2f) * 0.07f;
     renderer.drawBox(
         makeTransform(glm::vec3(2.55f, centerY + 0.80f + bob, cfg::kPropZ),
@@ -487,21 +401,13 @@ void LevelSelectScene::drawPlatformerProps(float centerY, bool locked) {
         shade(cfg::kF1Coin, locked), 1.0f, locked ? 0.0f : 0.45f);
 }
 
-//-----------------------------------------------------------------------------
-// FLOOR 2 - "Run"-style tunnel: nested rings receding into the dark.
-//-----------------------------------------------------------------------------
 void LevelSelectScene::drawTunnelProps(float centerY, bool locked) {
     Renderer& renderer = ctx().renderer;
 
-    // A darker panel just in front of the wall: the mouth of the tunnel.
     renderer.drawBoxAt(glm::vec3(0.0f, centerY, 0.02f),
                        glm::vec3(cfg::kFloorWidth - 1.3f, cfg::kFloorHeight - 0.55f, 0.08f),
                        shade(cfg::kF2Tunnel, locked));
 
-    // Three rings, each smaller, dimmer and further back than the last. The
-    // shrinking creates the illusion of a tunnel running away from the camera.
-    // All three sit IN FRONT of the back wall, or the inner two would be
-    // swallowed by it.
     constexpr int kRingCount = 3;
     const float ringZ[kRingCount]     = { 0.95f, 0.60f, 0.25f };
     const float ringScale[kRingCount] = { 1.00f, 0.72f, 0.46f };
@@ -511,8 +417,6 @@ void LevelSelectScene::drawTunnelProps(float centerY, bool locked) {
         const float halfH = (cfg::kFloorHeight - 0.75f) * 0.5f * ringScale[ring];
         const float bar = 0.16f * ringScale[ring];
 
-        // Rings fade out with distance, and alternate between the violet rim
-        // color and the cyan accent so the tunnel looks lit from inside.
         const float fade = 1.0f - static_cast<float>(ring) * 0.28f;
         const glm::vec3 ringColor = (ring % 2 == 0) ? cfg::kF2RimGlow : cfg::kF2Accent;
         const glm::vec3 finalColor = shade(ringColor * fade, locked);
@@ -520,7 +424,6 @@ void LevelSelectScene::drawTunnelProps(float centerY, bool locked) {
 
         const float z = ringZ[ring];
 
-        // Top and bottom bars.
         renderer.drawBoxAt(glm::vec3(0.0f, centerY + halfH, z),
                            glm::vec3(halfW * 2.0f + bar, bar, bar),
                            finalColor, 1.0f, emissive);
@@ -528,7 +431,6 @@ void LevelSelectScene::drawTunnelProps(float centerY, bool locked) {
                            glm::vec3(halfW * 2.0f + bar, bar, bar),
                            finalColor, 1.0f, emissive);
 
-        // Left and right bars.
         renderer.drawBoxAt(glm::vec3(-halfW, centerY, z),
                            glm::vec3(bar, halfH * 2.0f, bar),
                            finalColor, 1.0f, emissive);
@@ -538,16 +440,12 @@ void LevelSelectScene::drawTunnelProps(float centerY, bool locked) {
     }
 }
 
-//-----------------------------------------------------------------------------
-// FLOOR 3 - Stealth: sweeping searchlights and guard silhouettes.
-//-----------------------------------------------------------------------------
 void LevelSelectScene::drawStealthProps(float centerY, bool locked) {
     Renderer& renderer = ctx().renderer;
 
     const float floorY = centerY - cfg::kFloorHeight * 0.5f;
     const float ceilingY = centerY + cfg::kFloorHeight * 0.5f;
 
-    // Two guards: a body box with a smaller head box on top.
     const float guardX[2] = {-1.95f, 1.35f};
     for (const float x : guardX) {
         const glm::vec3 guardColor = shade(cfg::kF3Guard, locked);
@@ -558,8 +456,6 @@ void LevelSelectScene::drawStealthProps(float centerY, bool locked) {
                            glm::vec3(0.30f, 0.30f, 0.30f), guardColor);
     }
 
-    // Searchlight beams hanging from the ceiling. Translucent shapes must not
-    // write depth, or they would hide the geometry behind them.
     renderer.setDepthWrite(false);
 
     const float beamLength = cfg::kFloorHeight * 0.92f;
@@ -567,16 +463,12 @@ void LevelSelectScene::drawStealthProps(float centerY, bool locked) {
 
     const float mountX[2] = {-1.10f, 2.05f};
     for (int beam = 0; beam < 2; ++beam) {
-        // The second beam sweeps the opposite way, so they cross.
         const float angle = (beam == 0) ? sweep : -sweep;
         const glm::vec3 pivot(mountX[beam], ceilingY - 0.14f, cfg::kPropZ);
 
-        // The housing the beam swings from.
         renderer.drawBoxAt(pivot, glm::vec3(0.26f, 0.18f, 0.26f),
                            shade(cfg::kTowerStoneDark, locked));
 
-        // The cone of light. A pyramid hung from its apex gives exactly the
-        // right shape: narrow at the lamp, spreading out toward the floor.
         renderer.drawPyramid(
             hangingTransform(pivot, glm::vec3(1.05f, beamLength, 0.75f), angle),
             shade(cfg::kF3Light, locked),
@@ -587,17 +479,12 @@ void LevelSelectScene::drawStealthProps(float centerY, bool locked) {
     renderer.setDepthWrite(true);
 }
 
-//-----------------------------------------------------------------------------
-// TOP FLOOR - Boss fight: Pawlina caged, three rival mascots guarding her.
-//-----------------------------------------------------------------------------
 void LevelSelectScene::drawBossProps(float centerY, bool locked) {
     Renderer& renderer = ctx().renderer;
 
     const float deckY = centerY - cfg::kFloorHeight * 0.5f
                       + cfg::kSlabThickness * 0.5f;
 
-    // The arena dais. It also lifts everyone above the deck rim, which from
-    // this camera angle would otherwise cut the figures off at the knee.
     renderer.drawCylinderAt(
         glm::vec3(0.0f, deckY + cfg::kBossDaisHeight * 0.5f, 0.0f),
         glm::vec3(cfg::kBossDaisRadius * 2.0f, cfg::kBossDaisHeight,
@@ -606,24 +493,13 @@ void LevelSelectScene::drawBossProps(float centerY, bool locked) {
 
     const float floorY = deckY + cfg::kBossDaisHeight;
 
-    // The camera looks slightly UP at the tower, so any flat surface hides
-    // whatever stands in the middle of it. Standing the group near the front
-    // of the dais keeps their legs in view - the further back they are, the
-    // more of them the dais's own rim cuts off.
     constexpr float kBossZ = 1.70f;
 
-    // Pawlina is held on the left; the three rivals stand between her and the
-    // open front of the arena.
     drawPawlinaInCage(glm::vec3(-1.90f, floorY, kBossZ - 0.1f), locked);
 
     drawOwl (glm::vec3(-0.35f, floorY, kBossZ), locked);
     drawIbis(glm::vec3( 0.95f, floorY, kBossZ), locked);
-    // The shared model from core/MascotModels. Passing the locked fade as the
-    // tint reproduces shade() exactly: mix(colour, kLockedGrey, kLockedFade)
-    // when locked, and mix(colour, anything, 0) == colour when not.
-    mascots::drawBull(renderer, glm::vec3( 2.10f, floorY, kBossZ),
-                      mascots::kBullNaturalHeight, 0.0f,
-                      locked ? cfg::kLockedFade : 0.0f, cfg::kLockedGrey);
+    drawBull(glm::vec3( 2.10f, floorY, kBossZ), locked);
 }
 
 void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool locked) {
@@ -634,14 +510,12 @@ void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool loc
     const glm::vec3 kit   = shade(cfg::kFiuKit, locked);
     const glm::vec3 gold  = shade(cfg::kPawlinaTrim, locked);
 
-    // Legs.
     for (int side = 0; side < 2; ++side) {
         const float x = (side == 0 ? -0.09f : 0.09f);
         renderer.drawCylinderAt(feetPosition + glm::vec3(x, 0.12f, 0.0f),
                                 glm::vec3(0.11f, 0.24f, 0.11f), fur);
     }
 
-    // The navy cheer dress: a flared skirt with a gold hem, and a fitted top.
     renderer.drawCylinderAt(feetPosition + glm::vec3(0.0f, 0.34f, 0.0f),
                             glm::vec3(0.46f, 0.22f, 0.40f), kit);
     renderer.drawCylinderAt(feetPosition + glm::vec3(0.0f, 0.24f, 0.0f),
@@ -649,18 +523,15 @@ void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool loc
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.56f, 0.0f),
                           glm::vec3(0.36f, 0.40f, 0.32f), kit);
 
-    // White lettering across the chest.
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.60f, 0.15f),
                           glm::vec3(0.19f, 0.09f, 0.05f), shade(cfg::kFiuKitTrim, locked));
 
-    // Arms.
     for (int side = 0; side < 2; ++side) {
         const float x = (side == 0 ? -0.23f : 0.23f);
         renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.56f, 0.0f),
                               glm::vec3(0.13f, 0.30f, 0.13f), fur);
     }
 
-    // Head, muzzle and nose.
     const glm::vec3 head = feetPosition + glm::vec3(0.0f, 0.90f, 0.0f);
     renderer.drawSphereAt(head, glm::vec3(0.40f, 0.38f, 0.36f), fur);
     renderer.drawSphereAt(head + glm::vec3(0.0f, -0.07f, 0.15f),
@@ -669,7 +540,6 @@ void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool loc
                           glm::vec3(0.07f, 0.05f, 0.05f),
                           shade(cfg::kPantherNose, locked));
 
-    // Ears, with a darker inner surface.
     for (int side = 0; side < 2; ++side) {
         const float x = (side == 0 ? -0.16f : 0.16f);
         renderer.drawSphereAt(head + glm::vec3(x, 0.19f, 0.0f),
@@ -679,7 +549,6 @@ void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool loc
                               shade(cfg::kPantherInner, locked));
     }
 
-    // Her bow, worn over the left ear.
     renderer.drawSphereAt(head + glm::vec3(-0.22f, 0.26f, 0.0f),
                           glm::vec3(0.15f, 0.10f, 0.08f), kit);
     renderer.drawSphereAt(head + glm::vec3(-0.22f, 0.26f, 0.03f),
@@ -688,7 +557,6 @@ void LevelSelectScene::drawPawlinaInCage(const glm::vec3& feetPosition, bool loc
     mascots::drawEyePair(renderer, head + glm::vec3(0.0f, 0.05f, 0.16f), 0.19f, 0.09f,
                 shade(cfg::kEyeWhite, locked), shade(cfg::kEyeDark, locked));
 
-    // The cage: vertical bars across the front, with a rail top and bottom.
     const glm::vec3 barColor = shade(cfg::kF4CageBar, locked);
     const float cageHeight = 1.42f;
     const float cageHalfWidth = 0.44f;
@@ -715,42 +583,34 @@ void LevelSelectScene::drawOwl(const glm::vec3& feetPosition, bool locked) {
     const glm::vec3 cream  = shade(cfg::kOwlCream, locked);
     const glm::vec3 jersey = shade(cfg::kOwlJersey, locked);
 
-    // White football pants, then the blue jersey over a round owl body.
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.16f, 0.0f),
                           glm::vec3(0.40f, 0.28f, 0.34f), shade(cfg::kOwlPants, locked));
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.46f, 0.0f),
                           glm::vec3(0.48f, 0.46f, 0.40f), jersey);
 
-    // Jersey number.
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.50f, 0.19f),
                           glm::vec3(0.13f, 0.11f, 0.04f), shade(cfg::kFiuKitTrim, locked));
 
-    // Wings tucked at his sides.
     for (int side = 0; side < 2; ++side) {
         const float x = (side == 0 ? -0.27f : 0.27f);
         renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.46f, 0.0f),
                               glm::vec3(0.14f, 0.32f, 0.20f), body);
     }
 
-    // A wide, flat head - the main thing that says "owl" at this size.
     const glm::vec3 head = feetPosition + glm::vec3(0.0f, 0.84f, 0.0f);
     renderer.drawSphereAt(head, glm::vec3(0.52f, 0.44f, 0.44f), body);
 
-    // Cream speckles across the chest and brow.
     renderer.drawSphereAt(head + glm::vec3(-0.17f, 0.10f, 0.14f),
                           glm::vec3(0.07f, 0.05f, 0.04f), cream);
     renderer.drawSphereAt(head + glm::vec3(0.19f, 0.06f, 0.13f),
                           glm::vec3(0.06f, 0.04f, 0.04f), cream);
 
-    // Ear tufts.
     for (int side = 0; side < 2; ++side) {
         const float x = (side == 0 ? -0.20f : 0.20f);
         renderer.drawSphereAt(head + glm::vec3(x, 0.20f, 0.0f),
                               glm::vec3(0.16f, 0.19f, 0.13f), body);
     }
 
-    // Big blue eyes, and the bright orange brows that are his signature. The
-    // brows angle down toward the middle, which is what gives him that scowl.
     mascots::drawEyePair(renderer, head + glm::vec3(0.0f, 0.04f, 0.17f), 0.24f, 0.14f,
                 shade(cfg::kOwlEye, locked), shade(cfg::kEyeDark, locked));
 
@@ -763,7 +623,6 @@ void LevelSelectScene::drawOwl(const glm::vec3& feetPosition, bool locked) {
             shade(cfg::kOwlBrow, locked), 1.0f, locked ? 0.0f : 0.30f);
     }
 
-    // Beak.
     renderer.drawSphereAt(head + glm::vec3(0.0f, -0.07f, 0.21f),
                           glm::vec3(0.11f, 0.15f, 0.13f), cream);
 }
@@ -775,7 +634,6 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
     const glm::vec3 bill   = shade(cfg::kIbisBill, locked);
     const glm::vec3 jersey = shade(cfg::kIbisJersey, locked);
 
-    // Big yellow webbed feet on orange stilt legs.
     for (int side = 0; side < 2; ++side) {
         const float x = (side == 0 ? -0.10f : 0.10f);
         renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.04f, 0.05f),
@@ -785,7 +643,6 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
                                 glm::vec3(0.07f, 0.28f, 0.07f), bill);
     }
 
-    // White feathered body under an orange jersey.
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.40f, 0.0f),
                           glm::vec3(0.38f, 0.32f, 0.34f), body);
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.60f, 0.0f),
@@ -793,7 +650,6 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
     renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.62f, 0.17f),
                           glm::vec3(0.10f, 0.11f, 0.04f), shade(cfg::kFiuKitTrim, locked));
 
-    // Wings held out, the way he is always posing.
     for (int side = 0; side < 2; ++side) {
         const float sign = (side == 0 ? -1.0f : 1.0f);
         renderer.drawSphere(
@@ -803,20 +659,17 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
             body);
     }
 
-    // Long neck and small head.
     renderer.drawCylinderAt(feetPosition + glm::vec3(0.0f, 0.84f, 0.0f),
                             glm::vec3(0.15f, 0.20f, 0.15f), body);
     const glm::vec3 head = feetPosition + glm::vec3(0.0f, 0.98f, 0.0f);
     renderer.drawSphereAt(head, glm::vec3(0.27f, 0.25f, 0.26f), body);
 
-    // The long flat orange bill.
     renderer.drawSphereAt(head + glm::vec3(0.0f, -0.03f, 0.21f),
                           glm::vec3(0.13f, 0.08f, 0.34f), bill);
 
     mascots::drawEyePair(renderer, head + glm::vec3(0.0f, 0.06f, 0.10f), 0.15f, 0.07f,
                 shade(cfg::kEyeWhite, locked), shade(cfg::kEyeDark, locked));
 
-    // His little sailor hat, with the green band.
     renderer.drawCylinderAt(head + glm::vec3(0.0f, 0.17f, -0.01f),
                             glm::vec3(0.30f, 0.06f, 0.30f), body);
     renderer.drawCylinderAt(head + glm::vec3(0.0f, 0.21f, -0.01f),
@@ -824,29 +677,70 @@ void LevelSelectScene::drawIbis(const glm::vec3& feetPosition, bool locked) {
                             shade(cfg::kIbisGreen, locked));
 }
 
+void LevelSelectScene::drawBull(const glm::vec3& feetPosition, bool locked) {
+    Renderer& renderer = ctx().renderer;
 
-//-----------------------------------------------------------------------------
-// Selection frame, lock icon, Roary
-//-----------------------------------------------------------------------------
+    const glm::vec3 body   = shade(cfg::kBullBody, locked);
+    const glm::vec3 muzzle = shade(cfg::kBullMuzzle, locked);
+    const glm::vec3 horn   = shade(cfg::kBullHorn, locked);
+
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.13f : 0.13f);
+        renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.05f, 0.03f),
+                              glm::vec3(0.17f, 0.10f, 0.24f), shade(cfg::kBullHoof, locked));
+    }
+    renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.22f, 0.0f),
+                          glm::vec3(0.44f, 0.30f, 0.38f), shade(cfg::kBullPants, locked));
+
+    renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.54f, 0.0f),
+                          glm::vec3(0.60f, 0.48f, 0.44f), shade(cfg::kBullJersey, locked));
+    renderer.drawSphereAt(feetPosition + glm::vec3(0.0f, 0.58f, 0.21f),
+                          glm::vec3(0.11f, 0.12f, 0.04f), shade(cfg::kFiuKitTrim, locked));
+
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.33f : 0.33f);
+        renderer.drawSphereAt(feetPosition + glm::vec3(x, 0.52f, 0.0f),
+                              glm::vec3(0.16f, 0.34f, 0.16f), body);
+    }
+
+    const glm::vec3 head = feetPosition + glm::vec3(0.0f, 0.92f, 0.0f);
+    renderer.drawSphereAt(head, glm::vec3(0.44f, 0.40f, 0.42f), body);
+    renderer.drawSphereAt(head + glm::vec3(0.0f, -0.09f, 0.19f),
+                          glm::vec3(0.30f, 0.22f, 0.22f), muzzle);
+
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.07f : 0.07f);
+        renderer.drawSphereAt(head + glm::vec3(x, -0.09f, 0.29f),
+                              glm::vec3(0.06f, 0.05f, 0.04f), shade(cfg::kEyeDark, locked));
+    }
+
+    for (int side = 0; side < 2; ++side) {
+        const float sign = (side == 0 ? -1.0f : 1.0f);
+
+        renderer.drawSphereAt(head + glm::vec3(sign * 0.20f, 0.14f, 0.0f),
+                              glm::vec3(0.16f, 0.15f, 0.15f), horn);
+        renderer.drawSphereAt(head + glm::vec3(sign * 0.31f, 0.26f, 0.0f),
+                              glm::vec3(0.12f, 0.13f, 0.12f), horn);
+        renderer.drawSphereAt(head + glm::vec3(sign * 0.34f, 0.38f, 0.0f),
+                              glm::vec3(0.08f, 0.10f, 0.08f), horn);
+    }
+
+    renderer.drawSphere(
+        makeTransform(head + glm::vec3(0.0f, 0.09f, 0.21f),
+                      glm::vec3(0.34f, 0.07f, 0.08f)),
+        muzzle);
+}
+
 void LevelSelectScene::drawSelectionFrame(int floorIndex) {
     Renderer& renderer = ctx().renderer;
 
     const float floorY = cfg::floorCenterY(floorIndex) - cfg::kFloorHeight * 0.5f;
 
-    // Pulse between half and full brightness so the selection is obvious even
-    // in a still screenshot.
     const float pulse = 0.55f + 0.45f
         * (0.5f + 0.5f * std::sin(elapsedTime_ * cfg::kSelectPulseSpeed));
 
-    // Two rings hugging the tower, at the bottom and the top of the selected
-    // floor. The open top floor stops at its battlements: measuring to the
-    // full room height would leave the ring hanging in empty sky.
-    // On the open top floor the ring clears the figures standing on the dais
-    // rather than slicing through them at head height.
     const float upperRingOffset = floorPickHeight(floorIndex);
 
-    // Must clear the floor discs, which overhang the wall - otherwise the
-    // ring is swallowed by the very disc it is supposed to sit beside.
     const float ringRadius = kRadius + cfg::kSlabOverhang + 0.16f;
 
     drawRing(renderer, floorY, ringRadius, cfg::kSelectFrameThick,
@@ -862,7 +756,6 @@ void LevelSelectScene::drawLockIcon(int floorIndex) {
     const glm::vec3 center(0.0f, centerY, kLockZ);
     const glm::vec3 color = cfg::kF4CageBar;
 
-    // A padlock built from four boxes: the body, plus a three-sided shackle.
     renderer.drawBoxAt(center, glm::vec3(0.46f, 0.38f, 0.16f), color);
 
     renderer.drawBoxAt(center + glm::vec3(0.0f, 0.34f, 0.0f),
@@ -872,7 +765,6 @@ void LevelSelectScene::drawLockIcon(int floorIndex) {
     renderer.drawBoxAt(center + glm::vec3( 0.12f, 0.26f, 0.0f),
                        glm::vec3(0.07f, 0.20f, 0.10f), color);
 
-    // Keyhole.
     renderer.drawBoxAt(center + glm::vec3(0.0f, -0.02f, 0.09f),
                        glm::vec3(0.09f, 0.14f, 0.04f), cfg::kLockedGrey);
 }
@@ -880,7 +772,6 @@ void LevelSelectScene::drawLockIcon(int floorIndex) {
 void LevelSelectScene::drawRoary() {
     Renderer& renderer = ctx().renderer;
 
-    // A gentle bob on top of the slide, so Roary never looks frozen.
     const float bob = std::sin(elapsedTime_ * cfg::kRoaryBobSpeed)
                     * cfg::kRoaryBobAmount;
 
@@ -888,18 +779,11 @@ void LevelSelectScene::drawRoary() {
                       + cfg::kSlabThickness + bob;
     const glm::vec3 feet(cfg::kRoaryOffsetX, feetY, cfg::kRoaryOffsetZ);
 
-    // The lift platform he rides, in FIU gold.
     renderer.drawCylinderAt(feet + glm::vec3(0.0f, -0.08f, 0.0f),
                             glm::vec3(1.30f, 0.16f, 1.20f), cfg::kRoaryAccent);
 
-    // The character himself is shared with the levels, so there is exactly
-    // one Roary in the project.
     mascots::drawRoary(renderer, feet, cfg::kRoarySize.y, 0.0f);
 }
-
-//=============================================================================
-// On-screen text
-//=============================================================================
 
 void LevelSelectScene::drawUi() {
     Renderer& renderer = ctx().renderer;
@@ -911,13 +795,11 @@ void LevelSelectScene::drawUi() {
 
     text.begin(ctx().framebufferWidth, ctx().framebufferHeight);
 
-    // --- title ---------------------------------------------------------------
     text.drawCentered("ROARY'S ADVENTURE", centerX, px(30.0f),
                       px(cfg::kTitleScale), cfg::kTextPrimary);
     text.drawCentered("SAVE PAWLINA!", centerX, px(92.0f),
                       px(cfg::kSubtitleScale), cfg::kFiuGold);
 
-    // --- progress counter, top right -----------------------------------------
     const std::string progressLabel =
         "FLOORS CLEARED " + std::to_string(ctx().progress.completedCount()) +
         "/" + std::to_string(cfg::kFloorCount);
@@ -925,16 +807,12 @@ void LevelSelectScene::drawUi() {
               width - px(24.0f) - TextRenderer::measureWidth(progressLabel, px(cfg::kHintScale)),
               px(24.0f), px(cfg::kHintScale), cfg::kTextDim);
 
-    // --- small label beside each floor ---------------------------------------
     for (int floor = 0; floor < cfg::kFloorCount; ++floor) {
         const bool unlocked = ctx().progress.isUnlocked(floor);
         const bool completed = ctx().progress.isCompleted(floor);
 
-        // Anchor the label to the right-hand edge of the floor in world space,
-        // then project that point to the screen.
         glm::vec3 screenPoint(0.0f);
-        // Far enough out to clear the selection ring, which sits just beyond
-        // the overhanging floor discs.
+
         const glm::vec3 anchor(kRadius + 1.05f, cfg::floorCenterY(floor), 0.9f);
         if (!worldToScreen(anchor, renderer.viewProjection(),
                            ctx().framebufferWidth, ctx().framebufferHeight,
@@ -945,7 +823,6 @@ void LevelSelectScene::drawUi() {
         const float labelScale = px(cfg::kFloorLabelScale);
         const bool isSelected = (floor == selectedFloor_);
 
-        // Selected floor's label is brighter; locked ones are red.
         glm::vec3 labelColor = cfg::kTextDim;
         if (!unlocked)        labelColor = cfg::kTextLocked;
         else if (completed)   labelColor = cfg::kTextComplete;
@@ -954,9 +831,6 @@ void LevelSelectScene::drawUi() {
         const std::string label = std::string(isSelected ? "> " : "  ")
                                 + cfg::kFloorInfo[floor].shortLabel;
 
-        // One line of text is 7 font pixels tall. Stack the name just above
-        // the anchor point and the state just below it, with a small gap, so
-        // the two lines never collide.
         const float lineHeight = TextRenderer::measureHeight(labelScale);
         const float gap = labelScale * 1.5f;
 
@@ -971,17 +845,14 @@ void LevelSelectScene::drawUi() {
                   labelScale * 0.85f, labelColor);
     }
 
-    // --- bottom info panel ---------------------------------------------------
     const float panelHeight = px(190.0f);
     const float panelY = height - panelHeight - px(18.0f);
     const float panelX = px(50.0f);
     const float panelWidth = width - panelX * 2.0f;
 
-    // A dark translucent slab so the text stays readable over the artwork.
     text.fillRect(panelX, panelY, panelWidth, panelHeight,
                   cfg::kBgBottom, 0.93f);
 
-    // A gold rule along the top edge of the panel, tying it to the FIU theme.
     text.fillRect(panelX, panelY, panelWidth, px(3.0f), cfg::kFiuGold, 0.85f);
 
     const cfg::FloorInfo& info = cfg::kFloorInfo[selectedFloor_];
@@ -995,7 +866,6 @@ void LevelSelectScene::drawUi() {
     text.drawCentered(info.description, centerX, panelY + px(66.0f),
                       px(cfg::kDescriptionScale), cfg::kTextDim);
 
-    // --- status line ---------------------------------------------------------
     std::string statusText;
     glm::vec3 statusColor = cfg::kTextPrimary;
     float statusAlpha = 1.0f;
@@ -1004,7 +874,6 @@ void LevelSelectScene::drawUi() {
         statusText = "LOCKED - CLEAR THE FLOOR BELOW FIRST";
         statusColor = cfg::kTextLocked;
 
-        // Flash brightly for a moment after the player tries to enter it.
         if (lockedFlashTimer_ > 0.0f) {
             statusAlpha = 0.45f + 0.55f * std::abs(std::sin(lockedFlashTimer_ * 18.0f));
         } else {
@@ -1021,7 +890,6 @@ void LevelSelectScene::drawUi() {
     text.drawCentered(statusText, centerX, panelY + px(100.0f),
                       px(cfg::kHintScale), statusColor, statusAlpha);
 
-    // --- controls -----------------------------------------------------------
     text.drawCentered("W/S OR UP/DOWN - CHOOSE FLOOR     ENTER OR SPACE - START     ESC - QUIT",
                       centerX, panelY + px(136.0f),
                       px(cfg::kHintScale), cfg::kTextDim);

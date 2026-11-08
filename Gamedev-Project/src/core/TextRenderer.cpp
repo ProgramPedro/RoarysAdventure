@@ -1,3 +1,9 @@
+// Implements bitmap text: every lit font pixel becomes a small quad, and all the
+// quads for one draw call are batched into a single buffer upload, so even a full
+// screen of text is cheap. The shader just runs a 2D pixel coordinate through an
+// orthographic projection and fills a flat color. Strings are uppercased, because
+// the built-in font has no lowercase glyphs.
+
 #include "core/TextRenderer.h"
 
 #include "core/BitmapFont.h"
@@ -9,9 +15,6 @@
 #include <cctype>
 
 namespace {
-
-// The text shader is as simple as it gets: take a 2D pixel coordinate, run it
-// through an orthographic projection, and fill with a flat color.
 constexpr const char* kTextVertexShader = R"GLSL(
 #version 330 core
 layout (location = 0) in vec2 aPixelPos;
@@ -35,12 +38,11 @@ void main() {
 }
 )GLSL";
 
-// One glyph advances this far horizontally, including the gap after it.
 float advanceFor(float scale) {
     return static_cast<float>(font::kGlyphWidth + font::kGlyphGap) * scale;
 }
 
-} // namespace
+}
 
 bool TextRenderer::init() {
     if (!shader_.build(kTextVertexShader, kTextFragmentShader)) {
@@ -53,7 +55,6 @@ bool TextRenderer::init() {
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
 
-    // Two floats per vertex: x and y in pixels.
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float),
                           reinterpret_cast<void*>(0));
     glEnableVertexAttribArray(0);
@@ -70,14 +71,10 @@ void TextRenderer::cleanup() {
 }
 
 void TextRenderer::begin(int framebufferWidth, int framebufferHeight) {
-    // Text is an overlay: it must not be hidden by 3D geometry, and it needs
-    // alpha blending so faded labels work.
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Note the flipped top/bottom arguments: that is what puts (0,0) at the
-    // TOP-left instead of OpenGL's usual bottom-left.
     const glm::mat4 projection = glm::ortho(
         0.0f, static_cast<float>(std::max(framebufferWidth, 1)),
         static_cast<float>(std::max(framebufferHeight, 1)), 0.0f,
@@ -88,7 +85,6 @@ void TextRenderer::begin(int framebufferWidth, int framebufferHeight) {
 }
 
 void TextRenderer::end() {
-    // Hand the depth test back to whoever draws 3D next frame.
     glEnable(GL_DEPTH_TEST);
 }
 
@@ -98,8 +94,6 @@ void TextRenderer::pushQuad(float x, float y, float width, float height) {
     const float x1 = x + width;
     const float y1 = y + height;
 
-    // Two triangles, six vertices. No index buffer: text batches are rebuilt
-    // every frame and the duplicate vertices are not worth managing indices for.
     const float quad[12] = {
         x0, y0,  x1, y0,  x1, y1,
         x1, y1,  x0, y1,  x0, y0,
@@ -115,7 +109,6 @@ void TextRenderer::draw(const std::string& text, float x, float y, float scale,
     float cursorY = y;
 
     for (const char rawChar : text) {
-        // Newlines let a single string span several lines.
         if (rawChar == '\n') {
             cursorX = x;
             cursorY += measureHeight(scale)
@@ -123,18 +116,15 @@ void TextRenderer::draw(const std::string& text, float x, float y, float scale,
             continue;
         }
 
-        // The font is uppercase-only, so fold lowercase input up to match.
         const char glyphChar = static_cast<char>(
             std::toupper(static_cast<unsigned char>(rawChar)));
 
         const font::Glyph* glyph = font::find(glyphChar);
         if (glyph == nullptr) {
-            // Unknown character: leave a blank space rather than drawing junk.
             cursorX += advanceFor(scale);
             continue;
         }
 
-        // Emit one quad per lit pixel in the 5x7 grid.
         for (int row = 0; row < font::kGlyphHeight; ++row) {
             const char* rowPixels = glyph->rows[row];
             for (int col = 0; col < font::kGlyphWidth; ++col) {
@@ -172,7 +162,6 @@ void TextRenderer::flush(const glm::vec3& color, float alpha) {
 
     const std::size_t bytes = batch_.size() * sizeof(float);
     if (bytes > bufferCapacityBytes_) {
-        // Grow the buffer when a longer string comes along, then reuse it.
         glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(bytes),
                      batch_.data(), GL_DYNAMIC_DRAW);
         bufferCapacityBytes_ = bytes;
@@ -192,7 +181,6 @@ void TextRenderer::drawCentered(const std::string& text, float centerX, float y,
 }
 
 float TextRenderer::measureWidth(const std::string& text, float scale) {
-    // Measure the widest line, so multi-line strings center correctly.
     float widest = 0.0f;
     float lineWidth = 0.0f;
 
@@ -206,8 +194,6 @@ float TextRenderer::measureWidth(const std::string& text, float scale) {
     }
     widest = std::max(widest, lineWidth);
 
-    // The trailing gap after the final character is not part of the visible
-    // width, so take it back off.
     if (widest > 0.0f) {
         widest -= static_cast<float>(font::kGlyphGap) * scale;
     }

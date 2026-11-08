@@ -1,3 +1,8 @@
+// Holds the GLSL source for the lit and background shaders and implements the
+// Renderer's draw helpers on top of them. The lit shader is a single directional
+// light with an ambient floor, which is enough to make plain boxes read as 3D
+// without any lighting setup in the scenes.
+
 #include "core/Renderer.h"
 
 #include "core/Config.h"
@@ -10,12 +15,6 @@
 #include <algorithm>
 
 namespace {
-
-//-----------------------------------------------------------------------------
-// The one shader every solid object in the game uses. A single directional
-// light with an ambient floor: enough shading to make boxes read as 3D without
-// any lighting setup in the scenes.
-//-----------------------------------------------------------------------------
 constexpr const char* kLitVertexShader = R"GLSL(
 #version 330 core
 layout (location = 0) in vec3 aPosition;
@@ -60,11 +59,6 @@ void main() {
 }
 )GLSL";
 
-//-----------------------------------------------------------------------------
-// Background: a full-screen quad already in clip space. The fragment shader
-// mixes two colors vertically and adds a soft radial glow, which is what gives
-// the menu its FIU blue-to-gold look.
-//-----------------------------------------------------------------------------
 constexpr const char* kBackgroundVertexShader = R"GLSL(
 #version 330 core
 layout (location = 0) in vec3 aPosition;
@@ -109,7 +103,7 @@ void main() {
 }
 )GLSL";
 
-} // namespace
+}
 
 glm::mat4 makeTransform(const glm::vec3& center,
                         const glm::vec3& size,
@@ -117,8 +111,6 @@ glm::mat4 makeTransform(const glm::vec3& center,
     glm::mat4 model(1.0f);
     model = glm::translate(model, center);
 
-    // Rotations are applied Y, then Z, then X. Y is the useful one for turning
-    // objects to face the camera; Z tilts things like horns and searchlights.
     if (eulerDegrees.y != 0.0f) {
         model = glm::rotate(model, glm::radians(eulerDegrees.y), glm::vec3(0, 1, 0));
     }
@@ -154,9 +146,6 @@ bool Renderer::init() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Face culling is left OFF on purpose. Every placeholder shape is a closed
-    // solid, so the depth test already hides the back faces, and leaving
-    // culling off means a shape with reversed winding still looks correct.
     glDisable(GL_CULL_FACE);
 
     return true;
@@ -176,7 +165,6 @@ void Renderer::cleanup() {
 void Renderer::beginFrame(int framebufferWidth, int framebufferHeight) {
     glViewport(0, 0, std::max(framebufferWidth, 1), std::max(framebufferHeight, 1));
 
-    // Only depth needs clearing: drawBackground() covers every pixel.
     glDepthMask(GL_TRUE);
     glClear(GL_DEPTH_BUFFER_BIT);
 }
@@ -187,8 +175,6 @@ void Renderer::drawBackground(const glm::vec3& topColor,
                               const glm::vec2& glowCenterNdc,
                               float glowRadius,
                               float glowStrength) {
-    // The background sits behind everything, so it neither tests nor writes
-    // depth. It is the first thing drawn each frame.
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
@@ -229,10 +215,6 @@ void Renderer::applyMaterial(const glm::mat4& model, const glm::vec3& color,
     litShader_.use();
     litShader_.setMat4("uModel", model);
 
-    // The normal matrix is the inverse-transpose of the model matrix's upper
-    // 3x3. Without it, non-uniform scaling (which we use constantly, since
-    // every shape is a stretched unit cube) would skew the normals and the
-    // shading would come out wrong.
     litShader_.setMat3("uNormalMatrix",
                        glm::transpose(glm::inverse(glm::mat3(model))));
 
