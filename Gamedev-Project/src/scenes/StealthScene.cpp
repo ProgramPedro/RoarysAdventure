@@ -1,6 +1,9 @@
-// StealthScene.cpp, Floor 3, Silent Paws
-// Each frame handleInput reads the keys, update moves everything, and render draws.
-// The room is flat on the floor at height 0, and a facing of 0 degrees looks toward the camera.
+// Runs the stealth floor: movement with collision against the room and its inner
+// walls, the guard's patrol, vision cone and alert state, the four paws, and the
+// door that unlocks once all of them are taken. A thrown rock flies straight ahead
+// until it reaches its range or the first wall, and draws the guard to that spot.
+// Being seen returns Roary to the start and resets the guard, but the paws he has
+// already collected stay collected.
 
 #include "scenes/StealthScene.h"
 
@@ -24,7 +27,6 @@
 #include <string>
 
 namespace {
-
 const float kWallStep = 0.1f;
 
 float floorDistance(const glm::vec3& a, const glm::vec3& b) {
@@ -48,7 +50,7 @@ glm::mat4 visionConeTransform(const glm::vec3& apex, float facingDeg,
     return model;
 }
 
-} // namespace
+}
 
 bool StealthScene::init() {
     playerPos_        = cfg::kF3StartPos;
@@ -114,7 +116,6 @@ bool StealthScene::pointInsideWall(const glm::vec3& point) {
     return false;
 }
 
-// Steps along the line and stops at the first point inside a wall
 glm::vec3 StealthScene::walkUntilWall(const glm::vec3& from, const glm::vec3& to,
                                       bool& outBlocked) {
     const float distance = floorDistance(from, to);
@@ -187,7 +188,6 @@ void StealthScene::movePlayer(float deltaTime) {
     const float deltaX = moveDir_.x * speed * deltaTime;
     const float deltaZ = moveDir_.y * speed * deltaTime;
 
-    // One axis at a time, so Roary slides along walls instead of sticking
     playerPos_.x += deltaX;
     resolveInnerWalls(playerPos_, 0, deltaX, radius);
 
@@ -226,7 +226,6 @@ void StealthScene::checkDoor() {
     }
 }
 
-// The guard starts on patrol point 0 facing point 1, so he is always on his route
 void StealthScene::resetGuard() {
     const glm::vec3& first = cfg::kF3PatrolPoints[0].position;
     patrolIndex_ = 1;
@@ -237,12 +236,10 @@ void StealthScene::resetGuard() {
     guardAlertTimer_ = 0.0f;
 }
 
-// If distracted he looks at the noise, if pausing he waits, otherwise he walks to the next point
 void StealthScene::updateGuard(float deltaTime) {
     float targetFacingDeg = guardFacingDeg_;
 
     if (guardIsDistracted()) {
-        // Face the noise until the timer runs out, then turn back the way he was facing
         guardAlertTimer_ = std::max(0.0f, guardAlertTimer_ - deltaTime);
         targetFacingDeg = guardIsDistracted() ? angleToward(guardPos_, guardAlertTarget_)
                                               : guardFacingBeforeAlert_;
@@ -267,12 +264,10 @@ void StealthScene::updateGuard(float deltaTime) {
     guardFacingDeg_ = targetFacingDeg;
 }
 
-// Sneaking makes the guard's vision shorter
 float StealthScene::visionRange() const {
     return sneaking_ ? cfg::kF3VisionRange * cfg::kF3SneakVisionMul : cfg::kF3VisionRange;
 }
 
-// The guard sees Roary when he is in range, inside the cone, and not behind a wall
 bool StealthScene::guardCanSeePlayer() const {
     const float distance = floorDistance(guardPos_, playerPos_);
 
@@ -283,8 +278,6 @@ bool StealthScene::guardCanSeePlayer() const {
         return true;
     }
 
-    // Roary is inside the cone when the angle between the guard's facing and the direction to Roary
-    // is small enough. The dot product of two unit vectors is the cosine of that angle.
     const float facingRad = glm::radians(guardFacingDeg_);
     const glm::vec3 forward(std::sin(facingRad), 0.0f, std::cos(facingRad));
     const glm::vec3 toPlayer = (playerPos_ - guardPos_) / distance;
@@ -298,7 +291,6 @@ bool StealthScene::guardCanSeePlayer() const {
     return !blocked;
 }
 
-// Being seen sends Roary back to the start, but he keeps the paws he collected
 void StealthScene::getCaught() {
     playerPos_        = cfg::kF3StartPos;
     moveDir_          = glm::vec2(0.0f);
@@ -308,7 +300,6 @@ void StealthScene::getCaught() {
     resetGuard();
 }
 
-// The rock flies straight ahead of Roary and lands at its full range or at the first wall in the way
 void StealthScene::throwRock() {
     if (rocksLeft_ <= 0) {
         return;
@@ -322,9 +313,7 @@ void StealthScene::throwRock() {
     bool blocked = false;
     const glm::vec3 landing = walkUntilWall(playerPos_, target, blocked);
 
-    // Hearing ignores walls, so a rock through a doorway still distracts him
     if (floorDistance(guardPos_, landing) <= cfg::kF3NoiseRadius) {
-        // Remember where he was looking, unless he is already looking at a noise
         if (!guardIsDistracted()) {
             guardFacingBeforeAlert_ = guardFacingDeg_;
         }
@@ -334,7 +323,6 @@ void StealthScene::throwRock() {
 }
 
 void StealthScene::update(float deltaTime) {
-    // Order matters, because each step uses the results of the ones above it
     movePlayer(deltaTime);
     collectNearbyItems();
     checkDoor();
@@ -409,7 +397,6 @@ void StealthScene::drawRoom() {
     }
 }
 
-// Red while locked, green once every paw is collected
 void StealthScene::drawDoor() {
     const glm::vec3 color = doorIsOpen() ? cfg::kF3DoorOpen : cfg::kF3DoorLocked;
 
@@ -450,7 +437,6 @@ void StealthScene::drawGuard() {
                        cfg::kF3GuardHead);
 }
 
-// Tinted red for a moment after being caught
 void StealthScene::drawRoary() {
     const float tint = (caughtFlashTimer_ > 0.0f) ? 0.6f : 0.0f;
 
@@ -459,7 +445,6 @@ void StealthScene::drawRoary() {
                        facingDeg_, 0.0f, tint, cfg::kF3CaughtTint);
 }
 
-// Cyan normally, amber while the guard is distracted by a rock
 void StealthScene::drawVisionCone() {
     Renderer& renderer = ctx().renderer;
 

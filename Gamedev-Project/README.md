@@ -6,9 +6,21 @@ CAP 4052 group project.
 
 Names: Pedro Re, Remberto Silva
 
-Panther IDs: 6409617
+Panther IDs: 6409617 , 6441494
 
 ## Approved Concept
+
+Approved Concept: a 3D platformer made of minigame levels, each a
+reinterpretation of a different classic game, with Roary travelling through them
+to save Pawlina. Core mechanics are movement, jumping and interacting with items,
+in a world built around FIU blue and gold, using C++ with OpenGL, GLFW and GLM.
+
+Two things changed while building HW #3. Levels are selected from a tower rather
+than a world map, which stacks them and makes the climb the progression. The
+final boss became Rocky the bull and the rival school mascots instead of a giant
+lizard. The HW #3 goal, a playable prototype with level selection, simple levels
+and enemies to dodge, is met, and the boss fight originally planned for HW #4 is
+already in as a first version.
 
 
 ## Objective
@@ -276,3 +288,19 @@ src/scenes/BossScene: Top floor
 All tuning values, such as sizes, speeds, colours and level layouts, are in
 src/core/Config.h. The Floor 1 and Floor 2 layouts are in PlatformerLevel.h and
 TunnelLevel.h.
+
+
+## Gen AI Statement
+
+Generative AI was used to help with the syntax and to help guide us through building some dificult processes
+
+Example prompts:
+
+"I want to ensure that when a rock is thrown, the guard looks in that direction. When multiple rocks are thrown, and the path should still be followed. That means the first direction should be source of truth? Provide me a way to implement without giving it away" 
+
+"I want to ensure that when roary jumps over the NPC mobs that they flatten then disapear giving the player visual feedback, can you help me to figure this out without giving the answer away so i can learn" 
+
+"I found some code for a recreation of the run game I want to build out similar mechanics so can you break down how this code works so I have a better understand for when i build my own" 
+
+"I am planning on making sure rocky enters a stunned state when hitting a wall. Could we utilize the clamp feature that has been implemented to alert when rocky has hit a wal" 
+

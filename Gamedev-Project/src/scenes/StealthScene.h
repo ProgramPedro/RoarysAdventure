@@ -1,7 +1,10 @@
 #pragma once
-// StealthScene, Floor 3, Silent Paws
-// Sneak past the guard, collect the four paws, and leave through the door.
-// Rocks can be thrown to distract the guard. Tuning values are in Config.h.
+
+// Floor 3, Silent Paws: sneak around a patrolling guard, collect the four paws,
+// and leave through the door that opens once you have them all. Shift sneaks,
+// which is slower but shortens the guard's vision, and E throws one of a limited
+// supply of rocks to pull his attention somewhere else. The tuning lives in the
+// cfg::kF3 values in Config.h.
 
 #include "core/Config.h"
 #include "core/Scene.h"
@@ -58,14 +61,12 @@ private:
 
     float px(float designPixels) const;
 
-    // Roary
     glm::vec3 playerPos_{0.0f};
     glm::vec2 moveDir_{0.0f, 0.0f};
     float     facingDeg_        = 180.0f;
     bool      sneaking_         = false;
     float     caughtFlashTimer_ = 0.0f;
 
-    // Guard
     glm::vec3 guardPos_{0.0f};
     float     guardFacingDeg_         = 0.0f;
     int       patrolIndex_            = 0;
@@ -74,10 +75,8 @@ private:
     glm::vec3 guardAlertTarget_{0.0f};
     float     guardFacingBeforeAlert_ = 0.0f;
 
-    // Paws
     std::array<bool, cfg::kF3ItemCount> itemCollected_{};
 
-    // Rocks
     int rocksLeft_ = 0;
 
     float uiScale_ = 1.0f;
