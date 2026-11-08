@@ -1,7 +1,7 @@
 #pragma once
-// StealthScene - Floor 3, "Silent Paws"
+// StealthScene, Floor 3, Silent Paws
 // Sneak past the guard, collect the four paws, and leave through the door.
-// Rocks can be thrown to distract the guard. Tuning values are in Config.h (kF3).
+// Rocks can be thrown to distract the guard. Tuning values are in Config.h.
 
 #include "core/Config.h"
 #include "core/Scene.h"

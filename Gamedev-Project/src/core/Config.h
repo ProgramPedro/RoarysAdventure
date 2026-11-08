@@ -266,8 +266,8 @@ const float     kF3LightAlpha  = 0.34f;
 const float     kF3SweepSpeed  = 0.9f;
 const float     kF3SweepDeg    = 26.0f;  // half-angle of the sweep
 
-// Floor 3 - stealth level (StealthScene)
-// The room is centred on the origin; walls sit at +/- kF3RoomHalfX and kF3RoomHalfZ
+// Floor 3, stealth level, used by StealthScene
+// The room is centred on the origin, and kF3RoomHalfX and kF3RoomHalfZ are half its width and depth
 const float kF3RoomHalfX  = 16.0f;
 const float kF3RoomHalfZ  = 10.5f;
 const float kF3WallHeight = 1.80f;
@@ -284,7 +284,7 @@ struct F3WallSlab {
     float sizeZ;
 };
 
-// Interior walls: centre and size of each rectangle. Used for drawing AND collision.
+// Interior walls, given as the centre and size of each rectangle. Used for both drawing and collision.
 const F3WallSlab kF3InnerWalls[] = {
     { -4.0f, -4.75f, kF3WallThick, 11.5f },
     { -4.0f,  7.25f, kF3WallThick,  6.5f },
@@ -392,7 +392,7 @@ const float     kF3CameraFovDeg = 46.0f;
 const glm::vec3 kF4Wall    {0.353f, 0.063f, 0.188f};
 const glm::vec3 kF4CageBar {0.604f, 0.639f, 0.678f};
 
-// Top floor - boss fight (BossScene)
+// Top floor, boss fight, used by BossScene
 const float kF4ArenaRadius   = 11.0f;
 const float kF4DeckThickness = 0.30f;
 

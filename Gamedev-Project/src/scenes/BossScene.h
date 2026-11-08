@@ -1,7 +1,7 @@
 #pragma once
-// BossScene - Top floor, "Rival Showdown"
-// A dodging fight against Rocky the bull. Roary can only move and dash; Rocky
-// is damaged by touching him while he's stunned. Tuning values are in Config.h (kF4).
+// BossScene, Top floor, Rival Showdown
+// A dodging fight against Rocky the bull. Roary can only move and dash, and Rocky
+// is damaged by touching him while he is stunned. Tuning values are in Config.h.
 
 #include "core/Config.h"
 #include "core/Scene.h"
@@ -76,7 +76,7 @@ private:
     float      rockyFacingDeg_ = 0.0f;
     glm::vec2  chargeDir_{0.0f, 1.0f};
 
-    // Win / lose banner
+    // Win or lose message
     float outcomeTimer_ = 0.0f;
     bool  victory_      = false;
 

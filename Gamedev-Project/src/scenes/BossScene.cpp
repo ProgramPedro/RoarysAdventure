@@ -1,6 +1,6 @@
-// BossScene.cpp - Top floor, "Rival Showdown"
-// Rocky loops Waiting -> Telegraph -> Charging -> Stunned -> Recover. Dodge the
-// charge so he hits the wall, then touch him while he's stunned to damage him.
+// BossScene.cpp, Top floor, Rival Showdown
+// Rocky loops through Waiting, Telegraph, Charging, Stunned and Recover. Dodge the
+// charge so he hits the wall, then touch him while he is stunned to damage him.
 
 #include "scenes/BossScene.h"
 
@@ -59,7 +59,7 @@ void BossScene::handleInput(const Input& input) {
     }
 }
 
-// A short burst that can't be steered; Roary can't be hurt while it lasts
+// A short burst that cannot be steered, and Roary cannot be hurt while it lasts
 void BossScene::startDash() {
     if (dashCooldown_ > 0.0f || dashTimer_ > 0.0f) {
         return;
@@ -126,7 +126,7 @@ void BossScene::setRockyState(RockyState state, float duration) {
     rockyTimer_ = duration;
 }
 
-// Rocky's state machine: each state runs until its timer (or the wall) moves him on
+// Rocky's state machine. Each state runs until its timer runs out or he hits the wall
 void BossScene::updateRocky(float deltaTime) {
     if (rockyState_ == RockyState::Beaten) {
         return;
@@ -140,7 +140,7 @@ void BossScene::updateRocky(float deltaTime) {
 
     switch (rockyState_) {
     case RockyState::Waiting: {
-        // Face Roary and walk toward him
+        // Face Roary and walk toward him until he is close enough
         rockyFacingDeg_ = toPlayerDeg;
 
         const float distance = std::sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
@@ -327,7 +327,7 @@ void BossScene::drawArena() {
         cfg::kF4Deck);
 }
 
-// His tint shows what he's doing: red = about to charge, orange = stunned (hit him now)
+// His tint shows what he is doing. Red means he is about to charge, orange means he is stunned
 void BossScene::drawRocky() {
     if (rockyState_ == RockyState::Beaten) {
         return;
@@ -348,7 +348,7 @@ void BossScene::drawRocky() {
                       rockyFacingDeg_, tint, tintColor);
 }
 
-// Tinted pale blue while he can't be hurt
+// Tinted pale blue while he cannot be hurt
 void BossScene::drawPlayer() {
     const float tint = isInvulnerable() ? cfg::kF4InvulnTintMix : 0.0f;
 
