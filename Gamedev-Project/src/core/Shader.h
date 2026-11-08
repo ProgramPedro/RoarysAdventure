@@ -1,11 +1,9 @@
 #pragma once
-//=============================================================================
-// Shader - compiles a vertex + fragment shader pair into a GL program and
-// gives us small helpers for setting uniforms.
-//
-// Uniform locations are cached in a map the first time they are requested, so
-// we are not calling glGetUniformLocation hundreds of times per frame.
-//=============================================================================
+
+// Compiles a vertex and fragment shader pair into a GL program and provides small
+// helpers for setting uniforms. Uniform locations are cached the first time they
+// are asked for, so the game is not calling glGetUniformLocation hundreds of
+// times per frame. A shader owns a GL resource, so it cannot be copied.
 
 #include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
@@ -19,12 +17,9 @@ public:
     Shader() = default;
     ~Shader();
 
-    // Shaders own a GL resource, so copying them would double-delete it.
     Shader(const Shader&) = delete;
     Shader& operator=(const Shader&) = delete;
 
-    // Compiles and links the two sources. Returns false and prints the GL
-    // error log to stderr if anything fails.
     bool build(const char* vertexSource, const char* fragmentSource);
 
     void use() const;
@@ -32,7 +27,6 @@ public:
 
     bool isValid() const { return program_ != 0; }
 
-    // --- uniform setters -----------------------------------------------------
     void setMat4(const char* name, const glm::mat4& value);
     void setMat3(const char* name, const glm::mat3& value);
     void setVec3(const char* name, const glm::vec3& value);

@@ -1,23 +1,19 @@
 #pragma once
-//=============================================================================
-// SceneId - the list of every screen the game can switch to.
-//
-// TO ADD A NEW SCREEN: add an entry here, then add the matching case to
-// SceneManager::createScene() in SceneManager.cpp. Those are the only two
-// places that need to know the concrete scene type.
-//=============================================================================
+
+// The list of every screen the game can switch to, plus a helper that maps a
+// floor index to its scene id for the menu, which thinks in floor numbers. Adding
+// a screen means adding an entry here and the matching case in
+// SceneManager::createScene().
 
 enum class SceneId {
-    None,         // "no switch requested" - not a real scene
-    LevelSelect,  // the tower menu, and the screen the game opens on
-    Floor1,       // Mario-style platformer
-    Floor2,       // "Run"-style shifting tunnel
-    Floor3,       // stealth
-    Floor4,       // boss fight against the rival mascots
+    None,
+    LevelSelect,
+    Floor1,
+    Floor2,
+    Floor3,
+    Floor4,
 };
 
-// Maps a floor index (0-3) to its SceneId. Used by the menu, which thinks in
-// floor numbers rather than scene names.
 inline SceneId sceneIdForFloor(int floorIndex) {
     switch (floorIndex) {
         case 0:  return SceneId::Floor1;

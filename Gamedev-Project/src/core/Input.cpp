@@ -1,3 +1,8 @@
+// Implements the per-frame input snapshot: last frame's state is copied to
+// 'previous' so up-to-down changes can be spotted, then the current keys, mouse
+// button and cursor position are read from GLFW. The cursor is scaled from window
+// coordinates into framebuffer pixels so it lines up on high-DPI displays.
+
 #include "core/Input.h"
 
 #include <GLFW/glfw3.h>
@@ -5,7 +10,6 @@
 #include <algorithm>
 
 void Input::update(GLFWwindow* window) {
-    // Last frame's state becomes "previous" so we can spot up->down changes.
     previous_ = current_;
     mousePrevious_ = mouseCurrent_;
 
@@ -17,10 +21,6 @@ void Input::update(GLFWwindow* window) {
     mouseCurrent_ =
         (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
 
-    // glfwGetCursorPos reports WINDOW coordinates, but everything we draw is
-    // measured in FRAMEBUFFER pixels. On a Retina display the framebuffer is
-    // twice the window size, so without this scaling the mouse would land in
-    // the wrong place.
     double cursorX = 0.0;
     double cursorY = 0.0;
     glfwGetCursorPos(window, &cursorX, &cursorY);

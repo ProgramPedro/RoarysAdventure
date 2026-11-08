@@ -1,12 +1,9 @@
 #pragma once
-//=============================================================================
-// Camera - stores where we are looking from and hands out the view and
-// projection matrices. Deliberately simple: a look-at camera with no
-// first-person controls, which is all the menu needs.
-//
-// Later levels can either reuse this (set position/target every frame to
-// follow Roary) or add their own camera class.
-//=============================================================================
+
+// A look-at camera that stores a position and a target and hands out the view
+// and projection matrices. Its up vector can be set freely, which is what lets
+// the tunnel level roll the player's sense of down. Also declares worldToScreen,
+// used for placing labels and hit-testing the mouse.
 
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
@@ -20,9 +17,6 @@ public:
     void setTarget(const glm::vec3& target)     { target_ = target; }
     void setFovDegrees(float fov)               { fovDegrees_ = fov; }
 
-    // Which way is "up" for this camera. The tunnel level rolls this through
-    // a full turn as the player moves onto a wall or the ceiling, which is
-    // what makes the world appear to rotate around them.
     void setUp(const glm::vec3& up)              { up_ = up; }
 
     const glm::vec3& position() const { return position_; }
@@ -30,7 +24,6 @@ public:
 
     glm::mat4 view() const;
 
-    // Perspective projection using the live framebuffer size for aspect ratio.
     glm::mat4 perspective(int framebufferWidth, int framebufferHeight) const;
 
 private:
@@ -40,14 +33,6 @@ private:
     float fovDegrees_ = 45.0f;
 };
 
-//-----------------------------------------------------------------------------
-// Projects a world-space point into screen pixel coordinates, with the origin
-// at the TOP-LEFT of the window (the same convention TextRenderer uses).
-//
-// Returns false if the point is behind the camera, in which case the output is
-// not usable. Used by the menu to place floor labels and to hit-test the mouse
-// against each floor.
-//-----------------------------------------------------------------------------
 bool worldToScreen(const glm::vec3& worldPos,
                    const glm::mat4& viewProjection,
                    int framebufferWidth, int framebufferHeight,
