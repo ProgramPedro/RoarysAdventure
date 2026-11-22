@@ -3,6 +3,15 @@
 // Dashing carries Roary clear and makes him briefly invulnerable, on a cooldown,
 // and touching Rocky while he is stunned takes health off him. The scene shows a
 // win or lose message once either side runs out.
+//
+// Dashing past Rocky while he is charging parries him, and the next punish then
+// takes two health off instead of one. Because the dash is also the way out of a
+// charge, going for a parry means spending the escape to earn the bonus.
+//
+// Once Rocky is down to half health Sebastian joins and the rest of the fight
+// has both of them going at once: Rocky charging along the ground and Sebastian
+// slamming down from above. Sebastian cannot be hurt - Rocky is the ring leader
+// and beating him ends the floor - so the bird is purely something to dodge.
 
 #include "scenes/BossScene.h"
 
@@ -169,6 +178,10 @@ void BossScene::updateRocky(float deltaTime) {
 
         checkChargeContact();
 
+        // Same moment, opposite outcome: the contact test above is Roary being
+        // caught by the charge, this one is him dashing through it on purpose.
+        checkParry();
+
         const glm::vec3 clamped = clampToArena(rockyPos_, cfg::kF4RockyRadius);
         const bool hitTheWall = (clamped.x != rockyPos_.x || clamped.z != rockyPos_.z);
         rockyPos_ = clamped;
@@ -196,6 +209,116 @@ void BossScene::updateRocky(float deltaTime) {
     }
 }
 
+void BossScene::setIbisState(IbisState state, float duration) {
+    ibisState_ = state;
+    ibisTimer_ = duration;
+}
+
+void BossScene::updateIbis(float deltaTime) {
+    // He waits in the wings until Rocky is worn down to half.
+    if (ibisState_ == IbisState::Away) {
+        if (rockyHealth_ <= cfg::kF4IbisJoinHealth && rockyHealth_ > 0) {
+            // Drop in above Roary so his arrival is impossible to miss, then
+            // start on a hover rather than attacking immediately - landing on
+            // somebody the instant you appear is not a fight, it is an ambush.
+            ibisPos_ = glm::vec3(playerPos_.x, cfg::kF4IbisHoverY, playerPos_.z);
+            ibisEntryTextTimer_ = cfg::kF4IbisEntryTextTime;
+            setIbisState(IbisState::Hover, cfg::kF4IbisHoverTime);
+        }
+        return;
+    }
+
+    ibisTimer_ = std::max(0.0f, ibisTimer_ - deltaTime);
+    ibisEntryTextTimer_ = std::max(0.0f, ibisEntryTextTimer_ - deltaTime);
+
+    const float toPlayerX = playerPos_.x - ibisPos_.x;
+    const float toPlayerZ = playerPos_.z - ibisPos_.z;
+    const float flatDistance = std::sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ);
+
+    if (flatDistance > 0.01f) {
+        ibisFacingDeg_ = glm::degrees(std::atan2(toPlayerX, toPlayerZ));
+    }
+
+    switch (ibisState_) {
+    case IbisState::Hover: {
+        // Drift after Roary, slower than he can run. Being followed rather
+        // than tracked perfectly is what lets the player get out from under
+        // him before the mark even appears.
+        if (flatDistance > 0.1f) {
+            const float step = std::min(cfg::kF4IbisDriftSpeed * deltaTime, flatDistance);
+            ibisPos_.x += (toPlayerX / flatDistance) * step;
+            ibisPos_.z += (toPlayerZ / flatDistance) * step;
+        }
+
+        // Climb back to hover height if he is still low from the last slam.
+        ibisPos_.y = std::min(cfg::kF4IbisHoverY,
+                              ibisPos_.y + cfg::kF4IbisRiseSpeed * deltaTime);
+
+        if (ibisTimer_ <= 0.0f && ibisPos_.y >= cfg::kF4IbisHoverY - 0.05f) {
+            // Snapshot. From here the circle stays put, so walking out of it
+            // always works - which is the whole dodge.
+            ibisMarkPos_ = glm::vec3(playerPos_.x, 0.0f, playerPos_.z);
+            setIbisState(IbisState::Marking, cfg::kF4IbisMarkTime);
+        }
+        break;
+    }
+
+    case IbisState::Marking: {
+        // Slide over the marked spot while the warning is up, so he is
+        // directly above it when he drops.
+        const float dx = ibisMarkPos_.x - ibisPos_.x;
+        const float dz = ibisMarkPos_.z - ibisPos_.z;
+        const float distance = std::sqrt(dx * dx + dz * dz);
+
+        if (distance > 0.01f) {
+            const float step = std::min(cfg::kF4IbisDriftSpeed * 2.0f * deltaTime,
+                                        distance);
+            ibisPos_.x += (dx / distance) * step;
+            ibisPos_.z += (dz / distance) * step;
+        }
+
+        if (ibisTimer_ <= 0.0f) {
+            setIbisState(IbisState::Slamming, 0.0f);
+        }
+        break;
+    }
+
+    case IbisState::Slamming: {
+        ibisPos_.y -= cfg::kF4IbisSlamSpeed * deltaTime;
+
+        if (ibisPos_.y <= 0.0f) {
+            ibisPos_.y = 0.0f;
+            checkSlamContact();
+            setIbisState(IbisState::Recover, cfg::kF4IbisRecoverTime);
+        }
+        break;
+    }
+
+    case IbisState::Recover:
+        if (ibisTimer_ <= 0.0f) {
+            setIbisState(IbisState::Hover, cfg::kF4IbisHoverTime);
+        }
+        break;
+
+    case IbisState::Away:
+        break;
+    }
+}
+
+void BossScene::checkSlamContact() {
+    if (isInvulnerable()) {
+        return;
+    }
+
+    const float dx = playerPos_.x - ibisMarkPos_.x;
+    const float dz = playerPos_.z - ibisMarkPos_.z;
+    const float reach = cfg::kF4IbisSlamRadius + cfg::kF4PlayerRadius;
+
+    if (dx * dx + dz * dz <= reach * reach) {
+        takeHit();
+    }
+}
+
 void BossScene::checkChargeContact() {
     if (isInvulnerable()) {
         return;
@@ -208,6 +331,26 @@ void BossScene::checkChargeContact() {
     if (dx * dx + dz * dz <= reach * reach) {
         takeHit();
     }
+}
+
+void BossScene::checkParry() {
+    // Only while actually dashing, and only once per charge - a second pass
+    // through him should not re-arm a bonus that is already banked.
+    if (dashTimer_ <= 0.0f || parryReady_) {
+        return;
+    }
+
+    const float dx = playerPos_.x - rockyPos_.x;
+    const float dz = playerPos_.z - rockyPos_.z;
+    const float reach = cfg::kF4ParryRange + cfg::kF4PlayerRadius;
+
+    if (dx * dx + dz * dz > reach * reach) {
+        return;
+    }
+
+    parryReady_     = true;
+    parryGlowTimer_ = cfg::kF4ParryGlowTime;
+    parryTextTimer_ = cfg::kF4ParryTextTime;
 }
 
 void BossScene::tryPunish() {
@@ -223,7 +366,11 @@ void BossScene::tryPunish() {
         return;
     }
 
-    rockyHealth_ = std::max(0, rockyHealth_ - 1);
+    // A banked parry doubles this hit and is used up by it.
+    const int damage = parryReady_ ? cfg::kF4ParryDamage : 1;
+    parryReady_ = false;
+
+    rockyHealth_ = std::max(0, rockyHealth_ - damage);
 
     if (rockyHealth_ <= 0) {
         setRockyState(RockyState::Beaten, 0.0f);
@@ -261,6 +408,17 @@ void BossScene::resetFight() {
     rockyFacingDeg_ = 0.0f;
     setRockyState(RockyState::Waiting, cfg::kF4RockyWaitTime);
 
+    parryReady_     = false;
+    parryGlowTimer_ = 0.0f;
+    parryTextTimer_ = 0.0f;
+
+    ibisState_          = IbisState::Away;
+    ibisTimer_          = 0.0f;
+    ibisPos_            = glm::vec3(0.0f, cfg::kF4IbisHoverY, 0.0f);
+    ibisFacingDeg_      = 0.0f;
+    ibisMarkPos_        = glm::vec3(0.0f);
+    ibisEntryTextTimer_ = 0.0f;
+
     outcomeTimer_ = 0.0f;
     victory_      = false;
 }
@@ -284,9 +442,17 @@ void BossScene::update(float deltaTime) {
         playerInvulnTimer_ = std::max(0.0f, playerInvulnTimer_ - deltaTime);
     }
 
+    parryGlowTimer_ = std::max(0.0f, parryGlowTimer_ - deltaTime);
+    parryTextTimer_ = std::max(0.0f, parryTextTimer_ - deltaTime);
+
     updateDash(deltaTime);
     movePlayer(deltaTime);
     updateRocky(deltaTime);
+
+    // After Rocky, so the health he just lost is what decides whether
+    // Sebastian joins this frame. The two then run side by side, each on its
+    // own timer - that is what makes their attacks overlap.
+    updateIbis(deltaTime);
     tryPunish();
 }
 
@@ -310,7 +476,9 @@ void BossScene::render() {
     renderer.setCamera(camera.view(), camera.perspective(width, height));
 
     drawArena();
+    drawSlamMark();   // on the deck, so it sits under everything standing on it
     drawRocky();
+    drawIbis();
     drawPlayer();
     drawUi();
 }
@@ -330,7 +498,10 @@ void BossScene::drawRocky() {
     float tint = 0.0f;
     glm::vec3 tintColor(1.0f);
 
-    if (rockyState_ == RockyState::Telegraph) {
+    if (parryGlowTimer_ > 0.0f) {
+        tint = 0.6f;
+        tintColor = cfg::kF4RockyParryTint;
+    } else if (rockyState_ == RockyState::Telegraph) {
         tint = 0.5f;
         tintColor = cfg::kF4RockyTelegraphTint;
     } else if (rockyState_ == RockyState::Stunned) {
@@ -340,6 +511,52 @@ void BossScene::drawRocky() {
 
     mascots::drawBull(ctx().renderer, rockyPos_, cfg::kF4RockyHeight,
                       rockyFacingDeg_, tint, tintColor);
+}
+
+void BossScene::drawSlamMark() {
+    // Only while the warning is up. Once he is falling the bird itself is the
+    // warning, and leaving the circle drawn would say "still safe to stand
+    // here" at the exact moment it stops being true.
+    if (ibisState_ != IbisState::Marking) {
+        return;
+    }
+
+    Renderer& renderer = ctx().renderer;
+
+    // Brightens as the drop approaches, the same way Rocky's lane does, so
+    // both telegraphs are read the same way.
+    const float progress = (cfg::kF4IbisMarkTime > 0.0f)
+        ? 1.0f - (ibisTimer_ / cfg::kF4IbisMarkTime)
+        : 1.0f;
+
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(ibisMarkPos_.x, 0.03f, ibisMarkPos_.z),
+                            glm::vec3(cfg::kF4IbisSlamRadius * 2.0f, 0.02f,
+                                      cfg::kF4IbisSlamRadius * 2.0f),
+                            cfg::kF4SlamMarkColor,
+                            cfg::kF4SlamMarkAlpha * (0.45f + progress * 0.55f),
+                            1.0f);
+    renderer.setDepthWrite(true);
+}
+
+void BossScene::drawIbis() {
+    if (!ibisInFight()) {
+        return;
+    }
+
+    Renderer& renderer = ctx().renderer;
+
+    // A shadow on the deck directly below him. While he is in the air this is
+    // the only thing that says WHERE he is - the bird himself is drawn high up
+    // and the camera makes that hard to judge.
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(ibisPos_.x, 0.015f, ibisPos_.z),
+                            glm::vec3(cfg::kF4IbisRadius * 2.2f, 0.02f,
+                                      cfg::kF4IbisRadius * 2.2f),
+                            cfg::kF4IbisShadow, cfg::kF4IbisShadowAlpha, 1.0f);
+    renderer.setDepthWrite(true);
+
+    mascots::drawIbis(renderer, ibisPos_, cfg::kF4IbisModelHeight, ibisFacingDeg_);
 }
 
 void BossScene::drawPlayer() {
@@ -375,13 +592,36 @@ void BossScene::drawUi() {
     text.draw(dashCooldown_ <= 0.0f ? "DASH READY" : "DASH RECHARGING",
               px(24.0f), px(84.0f), hint, cfg::kTextPrimary);
 
+    // Naming him matters: an unexplained second attacker reads as a bug.
+    if (ibisInFight()) {
+        text.draw("SEBASTIAN - CANNOT BE HURT, BEAT ROCKY",
+                  px(24.0f), px(144.0f), hint, cfg::kIbisJersey);
+    }
+
+    // The parry says two things: that it happened, and that the bonus is still
+    // in hand. Without the second line the player forgets they are holding it.
+    if (parryTextTimer_ > 0.0f) {
+        text.drawCentered("PARRY!", centerX, bottom * 0.30f,
+                          px(cfg::kFloorNameScale), cfg::kF4RockyParryTint);
+    }
+
+    if (ibisEntryTextTimer_ > 0.0f) {
+        text.drawCentered("SEBASTIAN JOINS THE FIGHT!", centerX, bottom * 0.24f,
+                          px(cfg::kFloorNameScale), cfg::kIbisJersey);
+    }
+
+    if (parryReady_) {
+        text.draw("PARRY READY - NEXT HIT DOES DOUBLE",
+                  px(24.0f), px(114.0f), hint, cfg::kF4RockyParryTint);
+    }
+
     if (outcomeTimer_ > 0.0f) {
         text.drawCentered(victory_ ? "ROCKY IS DOWN!" : "KNOCKED OUT - TRY AGAIN",
                           centerX, bottom * 0.42f, px(cfg::kFloorNameScale),
                           victory_ ? cfg::kTextComplete : cfg::kTextLocked);
     }
 
-    text.drawCentered("WASD - MOVE     SPACE - DASH",
+    text.drawCentered("WASD - MOVE     SPACE - DASH (THROUGH A CHARGE TO PARRY)",
                       centerX, bottom - px(90.0f), hint, cfg::kTextPrimary);
     text.drawCentered("ESC - BACK TO THE TOWER     C - DEBUG COMPLETE",
                       centerX, bottom - px(54.0f), hint, cfg::kTextDim);

@@ -4,6 +4,11 @@
 // until it reaches its range or the first wall, and draws the guard to that spot.
 // Being seen returns Roary to the start and resets the guard, but the paws he has
 // already collected stay collected.
+//
+// Rocks are the floor's resource and there are only two. The guard's lap ends
+// with him pausing in the exit's room facing the door, so leaving usually means
+// spending one to pull him away - which is what makes an earlier throw a real
+// decision. They are not refilled when he is caught.
 
 #include "scenes/StealthScene.h"
 
@@ -220,6 +225,9 @@ bool StealthScene::doorIsOpen() const {
 void StealthScene::checkDoor() {
     const glm::vec3 door(cfg::kF3RoomHalfX, 0.0f, cfg::kF3DoorZ);
 
+    // Reaching the door is all it takes. What makes it hard is where the door
+    // is: the guard's lap ends with him pausing in this room looking straight
+    // at it, so the last few steps are the ones most likely to be watched.
     if (doorIsOpen() && floorDistance(playerPos_, door) <= cfg::kF3DoorTriggerRadius) {
         ctx().progress.markCompleted(kFloorIndex);
         returnToMenu();
@@ -296,6 +304,9 @@ void StealthScene::getCaught() {
     moveDir_          = glm::vec2(0.0f);
     facingDeg_        = 180.0f;
     caughtFlashTimer_ = cfg::kF3CaughtFlashTime;
+
+    // Rocks are NOT handed back. They are the floor's scarce resource, and a
+    // capture that refilled them would make throwing one free.
 
     resetGuard();
 }
@@ -485,6 +496,13 @@ void StealthScene::drawUi() {
     text.draw("ROCKS " + std::to_string(rocksLeft_)
                   + "/" + std::to_string(cfg::kF3RockCount),
               px(24.0f), px(54.0f), hint, cfg::kTextPrimary);
+
+    // Once the paws are in, point the player at the exit. The guard standing in
+    // front of it is the problem they then have to solve.
+    if (doorIsOpen()) {
+        text.drawCentered("THE DOOR IS OPEN - GET PAST THE GUARD",
+                          centerX, bottom - px(160.0f), hint, cfg::kTextComplete);
+    }
 
     text.drawCentered("WASD - MOVE     SHIFT - SNEAK     E - THROW A ROCK",
                       centerX, bottom - px(90.0f), hint, cfg::kTextPrimary);

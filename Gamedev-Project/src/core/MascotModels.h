@@ -15,6 +15,9 @@ inline constexpr float kRoaryNaturalHeight = 1.42f;
 
 inline constexpr float kBullNaturalHeight = 1.52f;
 
+// Sebastian stands shorter than the bull and a lot narrower.
+inline constexpr float kIbisNaturalHeight = 1.26f;
+
 void drawRoary(Renderer& renderer, const glm::vec3& feetPosition,
                float height = kRoaryNaturalHeight, float yawDegrees = 0.0f,
                float rollDegrees = 0.0f, float tint = 0.0f,
@@ -26,6 +29,11 @@ void drawEyePair(Renderer& renderer, const glm::vec3& center, float spacing,
 
 void drawBull(Renderer& renderer, const glm::vec3& feetPosition,
               float height = kBullNaturalHeight, float yawDegrees = 0.0f,
+              float tint = 0.0f, const glm::vec3& tintColor = glm::vec3(1.0f));
+
+// Miami's Sebastian. Same arguments as drawBull.
+void drawIbis(Renderer& renderer, const glm::vec3& feetPosition,
+              float height = kIbisNaturalHeight, float yawDegrees = 0.0f,
               float tint = 0.0f, const glm::vec3& tintColor = glm::vec3(1.0f));
 
 }

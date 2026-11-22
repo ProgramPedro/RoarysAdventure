@@ -235,7 +235,11 @@ const float kF3DoorTriggerRadius = 1.80f;
 const glm::vec3 kF3DoorLocked {0.451f, 0.149f, 0.173f};
 const glm::vec3 kF3DoorOpen   {0.333f, 0.871f, 0.522f};
 
-const int   kF3RockCount      = 5;
+// Only two rocks for the whole floor. The guard's patrol parks him facing the
+// exit for part of every lap (see kF3PatrolPoints), so getting out usually
+// means spending one to pull him off it - which makes every earlier throw a
+// decision about whether you will still have one when you reach the door.
+const int   kF3RockCount      = 2;
 const float kF3RockThrowRange = 8.0f;
 
 const float kF3NoiseRadius   = 5.50f;
@@ -249,13 +253,28 @@ struct F3PatrolPoint {
     float     pauseSeconds;
 };
 
+// The route, and the single most important thing about this floor's design.
+//
+// The guard walks a lap that ends with a spell in the room the exit door is in,
+// finishing at a point he arrives at heading EAST - so during that pause his
+// cone is pointed straight down the approach to the door. A player who saved a
+// rock can pull him off it; a player who spent both has to wait the pause out
+// and read the rest of the lap correctly.
+//
+// A pause of 0 means "turn the corner without stopping" - those entries exist
+// to steer him through a doorway, because he walks straight at the next point
+// and would otherwise clip the end of a divider.
 const F3PatrolPoint kF3PatrolPoints[] = {
-    { { -1.0f, 0.0f, -7.0f }, 1.2f },
-    { {  6.0f, 0.0f, -5.0f }, 0.0f },
-    { { 10.5f, 0.0f, -7.5f }, 1.2f },
-    { { 10.5f, 0.0f, -1.5f }, 1.2f },
-    { {  6.0f, 0.0f, -5.0f }, 0.0f },
-    { {  0.0f, 0.0f,  5.0f }, 1.2f },
+    { {  -1.0f, 0.0f, -7.0f }, 1.2f },   // room B, far side
+    { {   6.0f, 0.0f, -5.0f }, 0.0f },   // through divider B's doorway
+    { {  10.5f, 0.0f, -7.5f }, 1.2f },   // room D
+    { {  12.5f, 0.0f, -0.6f }, 0.0f },   // lined up with divider C's doorway
+    { {  12.5f, 0.0f,  5.5f }, 0.0f },   // into room C, where the exit is
+    { {  14.2f, 0.0f,  6.0f }, 4.5f },   // WATCHING THE DOOR, facing east
+    { {  10.0f, 0.0f,  6.5f }, 2.0f },   // back across room C, past the paw
+    { {  12.5f, 0.0f, -0.6f }, 0.0f },   // out through the doorway again
+    { {   6.0f, 0.0f, -5.0f }, 0.0f },   // back through divider B
+    { {   0.0f, 0.0f,  5.0f }, 1.2f },   // room B, near side
 };
 
 const int kF3PatrolCount =
@@ -292,7 +311,10 @@ const float     kF4InvulnTintMix = 0.55f;
 
 const int kF4MaxHearts = 3;
 
-const int   kF4RockyHealth     = 3;
+// Six health, so the fight lasts either six plain punches or three parried
+// ones. That keeps both routes to victory the same length and makes the parry
+// a shortcut in effort rather than in hits needed.
+const int   kF4RockyHealth     = 6;
 const float kF4RockyRadius     = 0.75f;
 const float kF4RockyHeight     = 2.30f;
 const float kF4RockyWalkSpeed  = 1.60f;
@@ -309,10 +331,67 @@ const float kF4RockyRecoverTime   = 0.80f;
 
 const float kF4RockyPunishRange = 1.70f;
 
+// Dashing into Rocky while he is charging parries him. It is deliberately the
+// brave option: the dash is what keeps Roary safe, so spending it by running
+// at the bull instead of away from him is the risk the double damage pays for.
+const float kF4ParryRange    = 2.20f;   // how close the dash has to pass him
+const int   kF4ParryDamage   = 2;       // a punish after a parry, instead of 1
+const float kF4ParryGlowTime = 1.20f;   // how long he flashes orange
+const float kF4ParryTextTime = 1.40f;   // how long PARRY! stays on screen
+
 const float kF4PlayerHitInvuln = 1.30f;
 
 const glm::vec3 kF4RockyTelegraphTint {0.961f, 0.200f, 0.200f};
 const glm::vec3 kF4RockyStunTint      {0.961f, 0.549f, 0.286f};
+
+// Brighter and more yellow than the stun orange, so a parry does not read as
+// "he is stunned already".
+const glm::vec3 kF4RockyParryTint     {1.000f, 0.631f, 0.141f};
+
+// ---------------------------------------------------------------------------
+// SEBASTIAN THE IBIS - the second half of the fight
+//
+// Rocky is the ring leader, so beating him ends the floor whatever the bird is
+// doing. Sebastian cannot be hurt at all; he is a second thing to dodge, not a
+// second health bar.
+//
+// He arrives once Rocky is down to kF4IbisJoinHealth and never leaves, so the
+// back half of the fight is both of them at once: a charge to sidestep along
+// the ground and a slam to walk out of from above. The two attacks run on
+// their own timers and will sometimes overlap, which is the point.
+//
+// His attack is an aerial ground pound. He hovers, marks a circle on the deck
+// under Roary, then drops onto it. The mark is a SNAPSHOT taken when the
+// telegraph starts - it does not follow the player - so walking out of it is
+// always possible.
+// ---------------------------------------------------------------------------
+const int   kF4IbisJoinHealth = 3;      // half of kF4RockyHealth
+
+const float kF4IbisRadius      = 0.55f; // body radius, for the landing check
+const float kF4IbisModelHeight = 1.45f;
+const float kF4IbisHoverY      = 3.40f; // how high he sits between attacks
+const float kF4IbisDriftSpeed  = 3.20f; // how fast he follows Roary while hovering
+const float kF4IbisSlamSpeed   = 16.0f; // the drop itself
+
+const float kF4IbisHoverTime   = 2.30f; // between attacks
+const float kF4IbisMarkTime    = 1.25f; // telegraph - long enough to walk out
+const float kF4IbisRecoverTime = 1.10f; // sat on the deck after landing
+const float kF4IbisRiseSpeed   = 4.50f; // climbing back to hover height
+
+// The circle he lands in. Wider than Rocky's lane, because an area is easier
+// to leave than a line is to sidestep.
+const float     kF4IbisSlamRadius = 3.00f;
+const glm::vec3 kF4SlamMarkColor {0.957f, 0.451f, 0.129f};  // Miami orange
+const float     kF4SlamMarkAlpha = 0.30f;
+
+// How long SEBASTIAN JOINS THE FIGHT stays up when he arrives.
+const float kF4IbisEntryTextTime = 2.20f;
+
+// A shadow under the bird. The rest of this floor has no shadows, but he is
+// the only thing that leaves the ground, and from this camera height alone is
+// almost impossible to judge - the shadow is what says where he actually is.
+const glm::vec3 kF4IbisShadow      {0.090f, 0.020f, 0.045f};
+const float     kF4IbisShadowAlpha = 0.45f;
 
 const float kF4VictoryTime = 2.60f;
 const float kF4DefeatTime  = 2.20f;

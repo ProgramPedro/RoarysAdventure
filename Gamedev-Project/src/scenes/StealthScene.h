@@ -5,6 +5,10 @@
 // which is slower but shortens the guard's vision, and E throws one of a limited
 // supply of rocks to pull his attention somewhere else. The tuning lives in the
 // cfg::kF3 values in Config.h.
+//
+// There are only two rocks, and the guard's patrol ends with him pausing in the
+// exit's room looking at the door, so getting out usually costs one. That is
+// what makes an earlier throw a decision rather than a free button.
 
 #include "core/Config.h"
 #include "core/Scene.h"

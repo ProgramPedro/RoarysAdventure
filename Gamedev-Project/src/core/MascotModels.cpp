@@ -191,4 +191,91 @@ void drawBull(Renderer& renderer, const glm::vec3& feetPosition,
                         muzzle);
 }
 
+
+// Miami's Sebastian. White bird, orange bill and jersey, yellow feet, sailor
+// hat. Lifted out of LevelSelectScene so the boss fight can draw him; yaw was
+// added for the same reason the bull needed it - a boss has to face things.
+void drawIbis(Renderer& renderer, const glm::vec3& feetPosition,
+              float height, float yawDegrees, float tint,
+              const glm::vec3& tintColor) {
+    const float k = height / kIbisNaturalHeight;
+
+    const float yaw = glm::radians(yawDegrees);
+    const float cosYaw = std::cos(yaw);
+    const float sinYaw = std::sin(yaw);
+
+    const auto at = [&](float x, float y, float z) {
+        const glm::vec3 local(x * k, y * k, z * k);
+        return feetPosition + glm::vec3(cosYaw * local.x + sinYaw * local.z,
+                                        local.y,
+                                        -sinYaw * local.x + cosYaw * local.z);
+    };
+    const auto size = [&](float x, float y, float z) {
+        return glm::vec3(x * k, y * k, z * k);
+    };
+    const glm::vec3 facing(0.0f, yawDegrees, 0.0f);
+
+    const auto shade = [&](const glm::vec3& c) {
+        return glm::mix(c, tintColor, glm::clamp(tint, 0.0f, 1.0f));
+    };
+
+    const glm::vec3 body   = shade(cfg::kIbisBody);
+    const glm::vec3 bill   = shade(cfg::kIbisBill);
+    const glm::vec3 jersey = shade(cfg::kIbisJersey);
+
+    // Big yellow webbed feet on orange stilt legs.
+    for (int side = 0; side < 2; ++side) {
+        const float x = (side == 0 ? -0.10f : 0.10f);
+        renderer.drawSphere(makeTransform(at(x, 0.04f, 0.05f),
+                                          size(0.17f, 0.07f, 0.26f), facing),
+                            shade(cfg::kIbisFeet));
+        renderer.drawCylinder(makeTransform(at(x, 0.19f, 0.0f),
+                                            size(0.07f, 0.28f, 0.07f), facing),
+                              bill);
+    }
+
+    // White feathered body under an orange jersey.
+    renderer.drawSphere(makeTransform(at(0.0f, 0.40f, 0.0f),
+                                      size(0.38f, 0.32f, 0.34f), facing), body);
+    renderer.drawSphere(makeTransform(at(0.0f, 0.60f, 0.0f),
+                                      size(0.40f, 0.34f, 0.36f), facing), jersey);
+    renderer.drawSphere(makeTransform(at(0.0f, 0.62f, 0.17f),
+                                      size(0.10f, 0.11f, 0.04f), facing),
+                        shade(cfg::kFiuKitTrim));
+
+    // Wings held out, the way he is always posing. These carry a roll as well
+    // as the yaw, which is why they build their own euler instead of reusing
+    // `facing`.
+    for (int side = 0; side < 2; ++side) {
+        const float sign = (side == 0 ? -1.0f : 1.0f);
+        renderer.drawSphere(
+            makeTransform(at(sign * 0.27f, 0.66f, 0.0f),
+                          size(0.12f, 0.30f, 0.18f),
+                          glm::vec3(0.0f, yawDegrees, sign * 28.0f)),
+            body);
+    }
+
+    // Long neck and small head.
+    renderer.drawCylinder(makeTransform(at(0.0f, 0.84f, 0.0f),
+                                        size(0.15f, 0.20f, 0.15f), facing), body);
+
+    const float headY = 0.98f;
+    renderer.drawSphere(makeTransform(at(0.0f, headY, 0.0f),
+                                      size(0.27f, 0.25f, 0.26f), facing), body);
+
+    // The long flat orange bill.
+    renderer.drawSphere(makeTransform(at(0.0f, headY - 0.03f, 0.21f),
+                                      size(0.13f, 0.08f, 0.34f), facing), bill);
+
+    drawEyePair(renderer, at(0.0f, headY + 0.06f, 0.10f), 0.15f * k, 0.07f * k,
+                shade(cfg::kEyeWhite), shade(cfg::kEyeDark));
+
+    // His little sailor hat, with the green band.
+    renderer.drawCylinder(makeTransform(at(0.0f, headY + 0.17f, -0.01f),
+                                        size(0.30f, 0.06f, 0.30f), facing), body);
+    renderer.drawCylinder(makeTransform(at(0.0f, headY + 0.21f, -0.01f),
+                                        size(0.22f, 0.05f, 0.22f), facing),
+                          shade(cfg::kIbisGreen));
+}
+
 }
