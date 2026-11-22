@@ -5,6 +5,8 @@
 // measurement. Colors are linear RGB in the 0..1 range. This is the file to edit
 // to retheme the game or change how a level feels.
 
+#include <cmath>
+
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
@@ -406,6 +408,20 @@ const float     kBouncePadSpeed = 17.0f;
 const glm::vec3 kBouncePadColor {0.400f, 0.878f, 0.945f};
 const float     kBouncePadSquash = 0.22f;
 
+// --- route signs ------------------------------------------------------------
+// The posts at each fork. They are decoration in the sense that you can walk
+// through them, but they are gameplay in the sense that the choice at a fork
+// is only a choice if you can read it before you commit.
+inline constexpr float     kSignPostHeight = 1.55f;
+inline constexpr glm::vec3 kSignPostSize  {0.14f, kSignPostHeight, 0.14f};
+inline constexpr glm::vec3 kSignPanelSize {1.95f, 0.66f, 0.12f};
+inline constexpr glm::vec3 kSignPostColor {0.231f, 0.192f, 0.157f}; // #3B3128 timber
+inline constexpr glm::vec3 kSignSafeColor {0.306f, 0.831f, 0.510f}; // #4ED482 green
+inline constexpr glm::vec3 kSignRiskColor {0.961f, 0.549f, 0.231f}; // #F58C3B amber
+// How far away the on-screen label for a sign stops being drawn. Past this
+// the text would be unreadable clutter.
+inline constexpr float     kSignLabelRange = 11.0f;
+
 const float kCoinRadius   = 0.40f;
 const float kCoinSpinRate = 110.0f;
 const float kGoalHoldTime = 1.40f;
@@ -435,7 +451,59 @@ inline float jumpSpeed() { return 2.0f * kJumpHeight / kTimeToApex; }
 const float kFallGravityMultiplier = 1.70f;
 const float kCoyoteTime = 0.10f;
 
+// --- the tile alphabet's behaviour ------------------------------------------
+// The glyphs themselves live in TunnelLevel.h; these are the numbers that say
+// what each one DOES. Every one is here rather than in the scene so the level
+// can be re-tuned without touching code.
+
+// 'o' BLOCK. A crate standing on a solid tile. Your feet have to be above its
+// top to pass; below that is a wipeout. A jump reaches 2.20, so the crate is
+// set well under that - clearing it must be comfortable, not frame-perfect.
+inline constexpr float     kBlockHeight = 1.15f;
+inline constexpr glm::vec3 kBlockColor  {0.937f, 0.286f, 0.400f}; // #EF4966
+
+// 'X' CRUMBLING. How long it holds after your feet first touch it. Short
+// enough that stopping is fatal, long enough that running across is never in
+// doubt: at 14 units/s you cross a 2.4-unit tile in 0.17s, so this is a
+// comfortable two tiles' grace.
+inline constexpr float     kCrumbleDelay = 0.42f;
+inline constexpr float     kCrumbleShake = 0.09f;   // how far it rattles first
+inline constexpr glm::vec3 kCrumbleColor {0.886f, 0.561f, 0.302f}; // #E28F4D
+
+// '^' SPRING. Fires the moment you land on it. The rise is kept under the
+// 6-unit width of the tunnel so you never launch through the opposite face.
+inline constexpr float     kSpringRise = 4.20f;
+inline constexpr glm::vec3 kSpringColor {0.361f, 0.937f, 0.514f}; // #5CEF83
+
+// '>' SPEED. A shove forward that then bleeds away, rather than a permanent
+// change - a permanent one would make every later section a different game.
+inline constexpr float     kSpeedTileBoost = 6.0f;   // units/s added at once
+inline constexpr float     kBoostDecay     = 4.0f;   // units/s lost per second
+// Yellow, not cyan: the plain tiles already alternate violet and cyan, so a
+// cyan speed tile disappeared into the background rhythm at speed.
+inline constexpr glm::vec3 kSpeedColor    {0.961f, 0.820f, 0.259f}; // #F5D142
+
+// '~' ICE. A fraction of the usual steering force. Not zero: you must still
+// be able to save yourself, just much too late if you left it late. At this
+// value a lane change started the moment you touch the ice takes about four
+// segments to complete, which is exactly the run-up act 6 gives you - any
+// lower and the one hole in that stretch is unavoidable rather than hard.
+inline constexpr float     kIceGrip  = 0.30f;
+inline constexpr glm::vec3 kIceColor {0.863f, 0.933f, 1.000f}; // #DCEEFF near-white
+
+// --- restarting ---------------------------------------------------------
+// false = a wipeout restarts the whole run, which is what the games this is
+// based on do. true = you resume from the last checkpoint in TunnelLevel.h.
+// The tunnel is 456 units long now, so this is the dial to turn if testers
+// never reach the end.
+inline constexpr bool kUseCheckpoints = false;
+
 const float kFallLimit = 7.0f;
+
+// Launch speed for a spring tile, from the rise above and the same gravity
+// the jump uses. std::sqrt is not constexpr, so this is a plain inline.
+inline float springSpeed() { return std::sqrt(2.0f * gravity() * kSpringRise); }
+
 
 const float kRollSpeed = 420.0f;
 
