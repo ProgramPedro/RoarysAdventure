@@ -76,6 +76,11 @@ private:
 
     void drawIbis();
     void drawSlamMark();
+
+    // The ring drawn on the deck around a stunned Rocky. Added after round 1
+    // of playtesting, where two of three testers had to be told that touching
+    // him while he is down is what damages him.
+    void drawOpeningRing();
     void takeHit();
 
     void movePlayer(float deltaTime);

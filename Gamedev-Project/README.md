@@ -73,13 +73,14 @@ W A S D or arrow keys: move
 
 Shift: sneak, slower but the guard cannot see as far
 
-E: throw a rock straight ahead
+E: throw a rock straight ahead. You only carry two for the whole floor.
 
 ### Top Floor: Rival Showdown
 
 W A S D or arrow keys: move
 
-Space: dash, Roary cannot be hurt while dashing
+Space: dash, Roary cannot be hurt while dashing. Dashing through Rocky while he
+is charging parries him, and the next hit then does double damage.
 
 ### On Every Floor
 
@@ -111,6 +112,12 @@ Enemies, item blocks, bounce pads and coins. Walkers can be stomped, spikers can
 
 Three lives, with knockback and brief invulnerability after a hit.
 
+Meaningful choice: the climb forks twice, and a signpost at each fork names both
+branches. The safe branch is wide, slow and empty; the risky branch is narrow and
+short and carries three coins and an enemy. The rule that creates the consequence
+is that coins only exist on the risky side, so a player who wants them has to
+take the harder platforming.
+
 ### Floor 2: The Shifting Tunnel
 
 Auto running down a square tunnel.
@@ -118,6 +125,13 @@ Auto running down a square tunnel.
 Running off the side of a surface moves the player onto the next wall, rotating gravity.
 
 Jumping across gaps. Falling restarts the run.
+
+Orientation is held as one of four faces rather than a free rotation, so gravity
+can never drift out of alignment with the tunnel.
+
+Tile types: plain tiles, holes, crates to dodge, crumbling tiles that fall away a
+moment after being touched, springs that cross gaps nothing else can, speed tiles
+and ice.
 
 ### Floor 3: Silent Paws
 
@@ -131,11 +145,19 @@ Being seen means getting caught. Roary goes back to the start but keeps the paws
 
 Sneaking shortens how far the guard can see, and the cone shrinks to match.
 
-Four collectible paws that unlock the exit door.
+Four collectible paws, one in each room, that unlock the exit door.
 
 Throwable rocks: a rock flies straight ahead of Roary and lands at its full range or at the first wall in the way.
 
 Noise distraction: a rock landing near the guard makes him look at it for a few seconds, then turn back and carry on along his route.
+
+Meaningful choice: Roary carries only two rocks for the whole floor, and they are
+not replaced when he is caught. The guard's patrol ends with him pausing in the
+room the exit is in, facing the door, so leaving usually costs a rock. The rule
+that creates the consequence is simply scarcity plus that patrol: a rock spent
+early to slip past the guard is a rock that is not there at the exit, and a
+player who spends both has to read the rest of the lap and wait the pause out
+instead.
 
 Feedback minimal. The cone turns amber while the guard is distracted, the door turns green when it opens, and Roary flashes red when caught.
 
@@ -148,6 +170,25 @@ Rocky the bull, driven by a state machine with the states Waiting, Telegraph, Ch
 Telegraphed charges: Rocky faces Roary, then locks his aim and turns red while he winds up, then charges in a straight line.
 
 Rocky is stunned and turns orange when he hits the wall. Touching him then damages him.
+
+Rocky has six health, so the fight is six ordinary hits or three parried ones.
+
+Meaningful choice: the parry. Dashing through Rocky while he is charging parries
+him, he flashes bright orange, PARRY appears on screen, and the next hit takes
+two health instead of one. The rule that creates the consequence is that the dash
+is also the only escape from a charge and is on a five second cooldown, so going
+for a parry means running at the bull and giving up the escape to earn it.
+
+Sebastian the ibis joins once Rocky is down to three health and from then on both
+attack at the same time, each on its own timer, so their attacks overlap. His
+attack is an aerial ground pound: he hovers and drifts after Roary, marks a
+circle on the deck, then drops onto it. The circle is a snapshot taken when the
+telegraph starts and does not follow the player, so it can always be walked out
+of without spending the dash.
+
+Sebastian cannot be damaged. Rocky is the ring leader, so beating him ends the
+floor whatever the bird is doing, and the interface says so while Sebastian is on
+screen.
 
 Hearts for Roary, with brief invulnerability after a hit. The fight restarts after three hits.
 
@@ -242,15 +283,36 @@ The camera is framed for a 1280 by 800 window, so narrower windows crop the side
 
 Floor 3: there is only one guard.
 
-Floor 3: the vision cone is drawn through walls, though the guard cannot actually see through them.
+Floor 3: the vision cone is drawn through walls, though the guard cannot actually
+see through them. The error is in the safe direction, since it makes the player
+more cautious than they need to be rather than less.
 
-Floor 3: the guard walks through Roary and never goes to investigate a noise.
+Floor 3: the guard walks through Roary, and he turns to look at a noise rather
+than walking over to investigate it.
 
 Floor 3: thrown rocks land instantly, with no flight animation.
 
-Top floor: only Rocky is in the fight. Owlsley and Sebastian are not implemented yet.
+Top floor: Owlsley the owl is not in the fight. Rocky and Sebastian are.
 
 Top floor: rescuing Pawlina at the end is not implemented yet.
+
+Top floor: Sebastian cannot be damaged by design, not as a limitation, because
+Rocky is the ring leader and beating him ends the floor.
+
+## Contribution Statement
+
+Pedro Re (6409617): Floor 3 Silent Paws and the Top Floor boss fight, including
+the guard patrol and vision, the paw pickups and exit door, the rock throwing and
+noise distraction, the dash and parry, Rocky's state machine and Sebastian's
+ground pound. Shared work on the mascot models and Config.
+
+Remberto Silva (6441494): Floor 1 Platform Peril and Floor 2 The Shifting Tunnel,
+including the platforming controller, enemies, item blocks and bounce pads, the
+tunnel's four face orientation system and its tile types, the shared collision
+helpers and the screenshot tool.
+
+Both: the level select tower, the scene system, the shared renderer and mascot
+models, and this README.
 
 ## External Asset Credits
 

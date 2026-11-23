@@ -393,6 +393,37 @@ const float kF4IbisEntryTextTime = 2.20f;
 const glm::vec3 kF4IbisShadow      {0.090f, 0.020f, 0.045f};
 const float     kF4IbisShadowAlpha = 0.45f;
 
+// ---------------------------------------------------------------------------
+// ROUND 1 PLAYTEST CHANGES  (build 5f8ed3c, three external testers)
+//
+//   1. Two of three testers had to be told that touching a stunned Rocky is
+//      how you damage him. One circled for about two minutes without ever
+//      approaching. Nothing on screen said the stun was an opening, so the
+//      fight taught nothing - and the parry, which needs that knowledge
+//      first, went undiscovered by all three.
+//
+//      Fix: while Rocky is stunned, say so in the middle of the screen and
+//      ring him on the deck, so the opening is visible from anywhere in the
+//      arena instead of being something you have to already know.
+//
+//   2. The testers who used the dash spammed it with no sense of the
+//      cooldown. The readout said DASH READY or DASH RECHARGING, which tells
+//      you whether but never when.
+//
+//      Fix: a bar that fills over the five seconds, so the wait can be read
+//      and a dash timed rather than guessed at.
+// ---------------------------------------------------------------------------
+
+// The "he is open" prompt, and the ring drawn around a stunned Rocky.
+const glm::vec3 kF4OpeningColor  {0.420f, 0.918f, 0.784f};  // mint, reads as "go"
+const float     kF4OpeningRadius = 2.60f;   // slightly wider than the punish range
+const float     kF4OpeningAlpha  = 0.26f;
+
+// The dash cooldown bar, in design pixels.
+const glm::vec3 kF4DashBarTrack {0.400f, 0.290f, 0.333f};  // the empty groove
+const float kF4DashBarWidth  = 150.0f;
+const float kF4DashBarHeight = 10.0f;
+
 const float kF4VictoryTime = 2.60f;
 const float kF4DefeatTime  = 2.20f;
 

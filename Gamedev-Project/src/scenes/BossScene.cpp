@@ -477,6 +477,7 @@ void BossScene::render() {
 
     drawArena();
     drawSlamMark();   // on the deck, so it sits under everything standing on it
+    drawOpeningRing();
     drawRocky();
     drawIbis();
     drawPlayer();
@@ -539,6 +540,29 @@ void BossScene::drawSlamMark() {
     renderer.setDepthWrite(true);
 }
 
+void BossScene::drawOpeningRing() {
+    // Only while he is actually down. Drawing it any other time would say
+    // "hit him now" at a moment when walking into him costs a heart.
+    if (rockyState_ != RockyState::Stunned) {
+        return;
+    }
+
+    Renderer& renderer = ctx().renderer;
+
+    // Pulses, so it reads as an invitation rather than as scenery. The ring is
+    // on the DECK rather than on Rocky himself because the thing being taught
+    // is "come to this spot", and a mark on the floor says that better than a
+    // colour change on a body does.
+    const float pulse = 1.0f + std::sin(rockyTimer_ * 9.0f) * 0.06f;
+
+    renderer.setDepthWrite(false);
+    renderer.drawCylinderAt(glm::vec3(rockyPos_.x, 0.025f, rockyPos_.z),
+                            glm::vec3(cfg::kF4OpeningRadius * 2.0f * pulse, 0.02f,
+                                      cfg::kF4OpeningRadius * 2.0f * pulse),
+                            cfg::kF4OpeningColor, cfg::kF4OpeningAlpha, 1.0f);
+    renderer.setDepthWrite(true);
+}
+
 void BossScene::drawIbis() {
     if (!ibisInFight()) {
         return;
@@ -589,17 +613,46 @@ void BossScene::drawUi() {
               px(24.0f), px(24.0f), hint, cfg::kTextPrimary);
     text.draw("ROCKY " + std::to_string(rockyHealth_) + "/" + std::to_string(cfg::kF4RockyHealth),
               px(24.0f), px(54.0f), hint, cfg::kTextPrimary);
-    text.draw(dashCooldown_ <= 0.0f ? "DASH READY" : "DASH RECHARGING",
-              px(24.0f), px(84.0f), hint, cfg::kTextPrimary);
+    // The dash, as a bar that fills rather than a word. Round 1 testers
+    // spammed the dash because READY / RECHARGING says whether it is up but
+    // never how long is left, so there was nothing to time against.
+    const float dashCharge = (cfg::kF4DashCooldown > 0.0f)
+        ? 1.0f - std::clamp(dashCooldown_ / cfg::kF4DashCooldown, 0.0f, 1.0f)
+        : 1.0f;
+    const bool dashReady = (dashCooldown_ <= 0.0f);
+
+    const float barX = px(24.0f);
+    const float barY = px(88.0f);
+    const float barW = px(cfg::kF4DashBarWidth);
+    const float barH = px(cfg::kF4DashBarHeight);
+
+    text.fillRect(barX - px(2.0f), barY - px(2.0f), barW + px(4.0f), barH + px(4.0f),
+                  cfg::kF4DashBarTrack, 0.75f);
+    text.fillRect(barX, barY, barW * dashCharge, barH,
+                  dashReady ? cfg::kF4OpeningColor : cfg::kTextLocked, 0.95f);
+
+    text.draw(dashReady ? "DASH READY" : "DASH",
+              barX, barY + barH + px(6.0f), hint,
+              dashReady ? cfg::kF4OpeningColor : cfg::kTextDim);
 
     // Naming him matters: an unexplained second attacker reads as a bug.
     if (ibisInFight()) {
         text.draw("SEBASTIAN - CANNOT BE HURT, BEAT ROCKY",
-                  px(24.0f), px(144.0f), hint, cfg::kIbisJersey);
+                  px(24.0f), px(150.0f), hint, cfg::kIbisJersey);
     }
 
     // The parry says two things: that it happened, and that the bonus is still
     // in hand. Without the second line the player forgets they are holding it.
+    // Says what the opening IS, not just that one exists. Round 1 showed the
+    // stun was invisible as an opportunity: testers saw him hit the wall and
+    // kept their distance, because nothing connected being stunned to being
+    // vulnerable.
+    if (rockyState_ == RockyState::Stunned && outcomeTimer_ <= 0.0f) {
+        text.drawCentered("ROCKY IS DOWN - TOUCH HIM TO ATTACK",
+                          centerX, bottom * 0.62f, px(cfg::kHintScale * 1.4f),
+                          cfg::kF4OpeningColor);
+    }
+
     if (parryTextTimer_ > 0.0f) {
         text.drawCentered("PARRY!", centerX, bottom * 0.30f,
                           px(cfg::kFloorNameScale), cfg::kF4RockyParryTint);
